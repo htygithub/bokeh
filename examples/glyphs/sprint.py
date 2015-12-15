@@ -60,7 +60,7 @@ source = ColumnDataSource(sprint)
 title = "Usain Bolt vs. 116 years of Olympic sprinters"
 
 xdr = Range1d(start=sprint.MetersBack.max()+2, end=0)                  # XXX: +2 is poor-man's padding (otherwise misses last tick)
-ydr = DataRange1d(sources=[source.columns("Year")], rangepadding=0.05) # XXX: should be 2 years (both sides)
+ydr = DataRange1d(range_padding=0.05) # XXX: should be 2 years (both sides)
 
 plot = Plot(title=title, x_range=xdr, y_range=ydr, plot_width=1000, plot_height=600, toolbar_location=None, outline_line_color=None)
 
@@ -87,19 +87,23 @@ no_olympics_glyph = Text(x=7.5, y=1942, text=["No Olympics in 1940 or 1944"],
     text_font_size="9pt", text_font_style="italic", text_color="silver")
 no_olympics = plot.add_glyph(no_olympics_glyph)
 
-tooltips = [
-    ("Name",          "@Name"),
-    ("Country",       "@Abbrev"),
-    ("Year",          "@Year"),
-    ("Time",          "@Time{0.00} s"),
-    ("Meters behind", "@{MetersBack}{0.00} m"),
-]
+tooltips = """
+<div>
+    <span style="font-size: 15px;">@Name</span>&nbsp;
+    <span style="font-size: 10px; color: #666;">(@Abbrev)</span>
+</div>
+<div>
+    <span style="font-size: 17px; font-weight: bold;">@Time{0.00}</span>&nbsp;
+    <span style="font-size: 10px; color: #666;">@Year</span>
+</div>
+<div style="font-size: 11px; color: #666;">@{MetersBack}{0.00} meters behind</div>
+"""
 
 hover = HoverTool(tooltips=tooltips, renderers=[medal])
 plot.add_tools(hover)
 
 doc = Document()
-doc.add(plot)
+doc.add_root(plot)
 
 if __name__ == "__main__":
     filename = "sprint.html"

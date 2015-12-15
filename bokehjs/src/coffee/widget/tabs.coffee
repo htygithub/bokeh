@@ -1,63 +1,67 @@
-define [
-  "underscore"
-  "jquery"
-  "bootstrap/tab"
-  "common/collection"
-  "common/continuum_view"
-  "common/has_properties"
-  "common/build_views"
-  "./tabs_template"
-], (_, $, $1, Collection, ContinuumView, HasProperties, build_views, tabs_template) ->
+_ = require "underscore"
+$ = require "jquery"
+$1 = require "bootstrap/tab"
+build_views = require "../common/build_views"
+ContinuumView = require "../common/continuum_view"
+tabs_template = require "./tabs_template"
+Widget = require "./widget"
 
-  class TabsView extends ContinuumView
+class TabsView extends ContinuumView
 
-    initialize : (options) ->
-      super(options)
-      @views = {}
-      @render()
+  initialize: (options) ->
+    super(options)
+    @views = {}
+    @render()
+    @listenTo @model, 'change', this.render
 
-    render: () ->
-      for own key, val of @views
-        val.$el.detach()
-      @$el.empty()
+  render: () ->
+    for own key, val of @views
+      val.$el.detach()
+    @$el.empty()
 
-      tabs = @mget('tabs')
-      active = @mget("active")
+    tabs = @mget('tabs')
+    active = @mget("active")
 
-      children = (tab.get("child") for tab in tabs)
-      build_views(@views, children)
+    children = (tab.get("child") for tab in tabs)
+    build_views(@views, children)
 
-      html = $(tabs_template({
-        tabs: tabs
-        active: (i) -> if i == active then 'bk-bs-active' else ''
-      }))
+    html = $(tabs_template({
+      tabs: tabs
+      active: (i) -> if i == active then 'bk-bs-active' else ''
+    }))
 
-      html.find("> li > a").click (event) ->
-        event.preventDefault()
-        $(this).tab('show')
+    that = this
+    html.find("> li > a").click (event) ->
+      event.preventDefault()
+      $(this).tab('show')
+      panelId = $(this).attr('href').replace('#tab-','')
+      tabs = that.model.get('tabs')
+      panelIdx = _.indexOf(tabs, _.find(tabs, (panel) ->
+        return panel.id == panelId
+      ))
+      that.model.set('active', panelIdx)
+      that.model.get('callback')?.execute(that.model)
 
-      $panels = html.children(".bk-bs-tab-pane")
+    $panels = html.children(".bk-bs-tab-pane")
 
-      for [child, panel] in _.zip(children, $panels)
-        $(panel).html(@views[child.id].$el)
+    for [child, panel] in _.zip(children, $panels)
+      $(panel).html(@views[child.id].$el)
 
-      @$el.append(html)
-      @$el.tabs
+    @$el.append(html)
+    @$el.tabs
+    return @
 
-  class Tabs extends HasProperties
-    type: "Tabs"
-    default_view: TabsView
-    defaults: ->
-      return _.extend {}, super(), {
-        tabs: []
-        active: 0
-      }
+class Tabs extends Widget.Model
+  type: "Tabs"
+  default_view: TabsView
 
-  class Tabses extends Collection
-    model: Tabs
+  defaults: ->
+    return _.extend {}, super(), {
+      tabs: []
+      active: 0
+      callback: null
+    }
 
-  return {
-    Model: Tabs
-    Collection: new Tabses()
-    View: TabsView
-  }
+module.exports =
+  Model: Tabs
+  View: TabsView

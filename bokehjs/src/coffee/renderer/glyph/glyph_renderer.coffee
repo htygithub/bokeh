@@ -1,222 +1,233 @@
-define [
-  "underscore"
-  "common/logging"
-  "common/has_parent"
-  "common/collection"
-  "common/plot_widget"
-  "range/factor_range"
-], (_, Logging, HasParent, Collection, PlotWidget, FactorRange) ->
+_ = require "underscore"
+{logger} = require "../../common/logging"
+HasParent = require "../../common/has_parent"
+PlotWidget = require "../../common/plot_widget"
+FactorRange = require "../../range/factor_range"
+RemoteDataSource = require "../../source/remote_data_source"
 
-  logger = Logging.logger
+class GlyphRendererView extends PlotWidget
 
-  class GlyphRendererView extends PlotWidget
+  initialize: (options) ->
+    super(options)
 
-    initialize: (options) ->
-      super(options)
+    @glyph = @build_glyph_view(@mget("glyph"))
 
-      # XXX: this will be slow (see later in this file), perhaps reuse @glyph.
-      @glyph = @build_glyph(@mget("glyph"))
+    selection_glyph = @mget("selection_glyph")
+    if not selection_glyph?
+      selection_glyph = @mget("glyph").clone()
+      selection_glyph.set(@model.selection_defaults, {silent: true})
+    @selection_glyph = @build_glyph_view(selection_glyph)
 
-      selection_glyph = @mget("selection_glyph")
-      if not selection_glyph?
-        selection_glyph = @mget("glyph").clone()
-        selection_glyph.set(@model.selection_defaults, {silent: true})
-      @selection_glyph = @build_glyph(selection_glyph)
+    nonselection_glyph = @mget("nonselection_glyph")
+    if not nonselection_glyph?
+      nonselection_glyph = @mget("glyph").clone()
+      nonselection_glyph.set(@model.nonselection_defaults, {silent: true})
+    @nonselection_glyph = @build_glyph_view(nonselection_glyph)
 
-      nonselection_glyph = @mget("nonselection_glyph")
-      if not nonselection_glyph?
-        nonselection_glyph = @mget("glyph").clone()
-        nonselection_glyph.set(@model.nonselection_defaults, {silent: true})
-      @nonselection_glyph = @build_glyph(nonselection_glyph)
+    hover_glyph = @mget("hover_glyph")
+    if hover_glyph?
+      @hover_glyph = @build_glyph_view(hover_glyph)
 
-      @need_set_data = true
+    decimated_glyph = @mget("glyph").clone()
+    decimated_glyph.set(@model.decimated_defaults, {silent: true})
+    @decimated_glyph = @build_glyph_view(decimated_glyph)
 
-      @xmapper = @plot_view.frame.get('x_mappers')[@mget("x_range_name")]
-      @ymapper = @plot_view.frame.get('y_mappers')[@mget("y_range_name")]
+    @xmapper = @plot_view.frame.get('x_mappers')[@mget("x_range_name")]
+    @ymapper = @plot_view.frame.get('y_mappers')[@mget("y_range_name")]
 
-      if @mget('server_data_source')
-        @setup_server_data()
-      @listenTo(this, 'change:server_data_source', @setup_server_data)
+    @set_data(false)
 
-    build_glyph: (model) ->
-      new model.default_view({model: model, renderer: this})
+    if @mget('data_source') instanceof RemoteDataSource.RemoteDataSource
+      @mget('data_source').setup(@plot_view, @glyph)
 
-    bind_bokeh_events: () ->
-      @listenTo(@model, 'change', @request_render)
-      @listenTo(@mget('data_source'), 'change', @set_data)
-      @listenTo(@mget('data_source'), 'select', @request_render)
+  build_glyph_view: (model) ->
+    new model.default_view({model: model, renderer: this})
 
-    have_selection_glyphs: () -> true
+  bind_bokeh_events: () ->
+    @listenTo(@model, 'change', @request_render)
+    @listenTo(@mget('data_source'), 'change', @set_data)
+    @listenTo(@mget('data_source'), 'select', @request_render)
+    @listenTo(@mget('data_source'), 'inspect', @request_render)
 
-    #TODO: There are glyph sub-type-vs-resample_op concordance issues...
-    setup_server_data: () ->
-      serversource = @mget('server_data_source')
-      # hack, call set data, becuase there are some attrs that we need
-      # that are in it
-      data = _.extend({}, @mget('data_source').get('data'), serversource.get('data'))
-      @mget('data_source').set('data', data)
-      @set_data(false)
-
-      transform_params = serversource.attributes['transform']
-      resample_op = transform_params['resample']
-      
-      
-      #TODO: Perhaps pass 'plot_view' through in the request instead of these fractions carved off 
-      plot_h_range = @plot_view.frame.get('h_range')
-      plot_v_range = @plot_view.frame.get('v_range')
-      data_x_range = @plot_view.x_range
-      data_y_range = @plot_view.y_range
-
-      #TODO: This is weird.  For example, h_range is passed in twice.  Hugo or Joseph should clean it up
-      if (resample_op == 'line1d')
-        domain = transform_params['domain']
-        if domain == 'x'
-          serversource.listen_for_line1d_updates(
-            @mget('data_source'),
-            plot_h_range, plot_v_range,
-            data_x_range, data_y_range,
-            plot_h_range,
-            # XXX: @glyph.x.field (etc.) indicates this be moved to Glyph
-            @glyph.glyph.y.field,
-            @glyph.glyph.x.field,
-            [@glyph.glyph.y.field],
-            transform_params
-          )
-        else
-          throw new Error("Domains other than 'x' not supported yet.")
-      else if (resample_op == 'heatmap')
-        serversource.listen_for_heatmap_updates(
-           @mget('data_source'),
-           plot_h_range, plot_v_range,
-           data_x_range, data_y_range,
-           transform_params
-        )
-      else if (resample_op == 'abstract rendering')
-        serversource.listen_for_ar_updates(
-           @plot_view
-           @mget('data_source'),
-             #TODO: Joseph -- Get rid of the next four params because we're passing in the plot_view
-           plot_h_range, plot_v_range,
-           data_x_range, data_y_range,
-           transform_params)
-      else
-        logger.warn("unknown resample op: '#{resample_op}'")
-
-    set_data: (request_render=true) ->
-      source = @mget('data_source')
-      t0 = Date.now()
-
-      @all_indices = @glyph.set_data(source)
-
-      @selection_glyph.set_data(source)
-      @nonselection_glyph.set_data(source)
-
-      dt = Date.now() - t0
-      logger.debug("#{@glyph.model.type} glyph (#{@glyph.model.id}): set_data finished in #{dt}ms")
-
-      @have_new_data = true
-
-      if request_render
+    # TODO (bev) This is a quick change that  allows the plot to be
+    # update/re-rendered when properties change on the JS side. It would
+    # be better to make this more fine grained in terms of setting visuals
+    # and also could potentially be improved by making proper models out
+    # of "Spec" properties. See https://github.com/bokeh/bokeh/pull/2684
+    @listenTo(@mget('glyph'), 'propchange', () ->
+        @glyph.set_visuals(@mget('data_source'))
         @request_render()
+    )
 
-    render: () ->
-      if @need_set_data
-        @set_data(false)
-        @need_set_data = false
+  have_selection_glyphs: () -> @selection_glyph? && @nonselection_glyph?
 
-      @glyph._map_data()
+  # TODO (bev) arg is a quick-fix to allow some hinting for things like
+  # partial data updates (especially useful on expensive set_data calls
+  # for image, e.g.)
+  set_data: (request_render=true, arg) ->
+    t0 = Date.now()
+    source = @mget('data_source')
 
-      @selection_glyph._map_data()
-      @nonselection_glyph._map_data()
+    @glyph.set_data(source, arg)
 
-      # XXX: this ignores (non)selection glyphs
-      if @_mask_data? and not (@plot_view.x_range instanceof FactorRange.Model) \
-                      and not (@plot_view.y_range instanceof FactorRange.Model)
-        indices = @_mask_data()
+    @glyph.set_visuals(source)
+    @decimated_glyph.set_visuals(source)
+    if @have_selection_glyphs()      
+      @selection_glyph.set_visuals(source)
+      @nonselection_glyph.set_visuals(source)
+    if @hover_glyph?
+      @hover_glyph.set_visuals(source)
+
+    length = source.get_length()
+    length = 1 if not length?
+    @all_indices = [0...length]
+
+    lod_factor = @plot_model.get('lod_factor')
+    @decimated = []
+    for i in [0...Math.floor(@all_indices.length/lod_factor)]
+      @decimated.push(@all_indices[i*lod_factor])
+
+    dt = Date.now() - t0
+    logger.debug("#{@glyph.model.type} GlyphRenderer (#{@model.id}): set_data finished in #{dt}ms")
+
+    @set_data_timestamp = Date.now()
+
+    if request_render
+      @request_render()
+
+  render: () ->
+    t0 = Date.now()
+
+    glsupport = @glyph.glglyph
+
+    tmap = Date.now()
+    @glyph.map_data()
+    dtmap = Date.now() - t0
+
+    tmask = Date.now()
+    if glsupport
+      indices = @all_indices  # WebGL can do the clipping much more efficiently
+    else
+      indices = @glyph._mask_data(@all_indices)
+    dtmask = Date.now() - tmask
+
+    ctx = @plot_view.canvas_view.ctx
+    ctx.save()
+
+    selected = @mget('data_source').get('selected')
+    if !selected or selected.length == 0
+      selected = []
+    else
+      if selected['0d'].glyph
+        selected = indices
+      else if selected['1d'].indices.length > 0
+        selected = selected['1d'].indices
+      else if selected['2d'].indices.length > 0
+        selected = selected['2d'].indices
       else
-        indices = @all_indices
+        selected = []
 
-      ctx = @plot_view.canvas_view.ctx
-      ctx.save()
-
-      do_render = (ctx, indices, glyph) =>
-        if @have_new_data
-          glyph.update_data(@mget('data_source'))
-        glyph.render(ctx, indices)
-
-      selection = @mget('data_source').get('selected')
-      if selection? and selection.length > 0
-        selected_indices = selection
+    inspected = @mget('data_source').get('inspected')
+    if !inspected or inspected.length == 0
+      inspected = []
+    else
+      if inspected['0d'].glyph
+        inspected = indices
+      else if inspected['1d'].indices.length > 0
+        inspected = inspected['1d'].indices
+      else if inspected['2d'].indices.length > 0
+        inspected = inspected['2d'].indices
       else
-        selected_indices = []
+        inspected = []
 
-      t0 = Date.now()
+    lod_threshold = @plot_model.get('lod_threshold')
+    if @plot_view.interactive and !glsupport and lod_threshold? and @all_indices.length > lod_threshold
+      # Render decimated during interaction if too many elements and not using GL
+      indices = @decimated
+      glyph = @decimated_glyph
+      nonselection_glyph = @decimated_glyph
+      selection_glyph = @selection_glyph
+    else
+      glyph = @glyph
+      nonselection_glyph = @nonselection_glyph
+      selection_glyph = @selection_glyph
 
-      if not (selected_indices and selected_indices.length and @have_selection_glyphs())
-        do_render(ctx, indices, @glyph)
-      else
-        # reset the selection mask
-        selected_mask = (false for i in @all_indices)
-        for idx in selected_indices
-          selected_mask[idx] = true
+    if @hover_glyph? and inspected.length
+      indices = _.without.bind(null, indices).apply(null, inspected)
 
-        # intersect/different selection with render mask
-        selected = new Array()
-        nonselected = new Array()
-        for i in indices
-          if selected_mask[i]
-            selected.push(i)
-          else
-            nonselected.push(i)
+    if not (selected.length and @have_selection_glyphs())
+        trender = Date.now()
+        glyph.render(ctx, indices, @glyph)
+        if @hover_glyph and inspected.length
+          @hover_glyph.render(ctx, inspected, @glyph)
+        dtrender = Date.now() - trender
 
-        do_render(ctx, selected,    @selection_glyph)
-        do_render(ctx, nonselected, @nonselection_glyph)
+    else
+      # reset the selection mask
+      tselect = Date.now()
+      selected_mask = {}
+      for i in selected
+        selected_mask[i] = true
 
-      dt = Date.now() - t0
-      logger.trace("#{@glyph.model.type} glyph (#{@glyph.model.id}): do_render calls finished in #{dt}ms")
+      # intersect/different selection with render mask
+      selected = new Array()
+      nonselected = new Array()
+      for i in indices
+        if selected_mask[i]?
+          selected.push(i)
+        else
+          nonselected.push(i)
+      dtselect = Date.now() - tselect
 
-      @have_new_data = false
-      ctx.restore()
+      trender = Date.now()
+      nonselection_glyph.render(ctx, nonselected, @glyph)
+      selection_glyph.render(ctx, selected, @glyph)
+      if @hover_glyph?
+        @hover_glyph.render(ctx, inspected, @glyph)
+      dtrender = Date.now() - trender
 
-    xrange: () ->
-      return @plot_view.x_range
+    @last_dtrender = dtrender
 
-    yrange: () ->
-      return @plot_view.y_range
+    dttot = Date.now() - t0
+    logger.debug("#{@glyph.model.type} GlyphRenderer (#{@model.id}): render finished in #{dttot}ms")
+    logger.trace(" - map_data finished in       : #{dtmap}ms")
+    if dtmask?
+      logger.trace(" - mask_data finished in      : #{dtmask}ms")
+    if dtselect?
+      logger.trace(" - selection mask finished in : #{dtselect}ms")
+    logger.trace(" - glyph renders finished in  : #{dtrender}ms")
 
-    map_to_screen: (x, x_units, y, y_units) ->
-      @plot_view.map_to_screen(x, x_units, y, y_units, @mget("x_range_name"), @mget("y_range_name"))
+    ctx.restore()
 
-    draw_legend: (ctx, x0, x1, y0, y1) ->
-      @glyph.draw_legend(ctx, x0, x1, y0, y1)
+  map_to_screen: (x, y) ->
+    @plot_view.map_to_screen(x, y, @mget("x_range_name"), @mget("y_range_name"))
 
-    hit_test: (geometry) ->
-      @glyph.hit_test(geometry)
+  draw_legend: (ctx, x0, x1, y0, y1) ->
+    @glyph.draw_legend(ctx, x0, x1, y0, y1)
 
-  class GlyphRenderer extends HasParent
-    default_view: GlyphRendererView
-    type: 'GlyphRenderer'
+  hit_test: (geometry) ->
+    @glyph.hit_test(geometry)
 
-    selection_defaults: {}
-    nonselection_defaults: {fill_alpha: 0.1, line_alpha: 0.1}
+class GlyphRenderer extends HasParent
+  default_view: GlyphRendererView
+  type: 'GlyphRenderer'
 
-    defaults: ->
-      return _.extend {}, super(), {
-        x_range_name: "default"
-        y_range_name: "default"
-        data_source: null
-      }
+  selection_defaults: {}
+  decimated_defaults: {fill_alpha: 0.3, line_alpha: 0.3, fill_color: "grey", line_color: "grey"}
+  nonselection_defaults: {fill_alpha: 0.2, line_alpha: 0.2}
 
-    display_defaults: ->
-      return _.extend {}, super(), {
-        level: 'glyph'
-      }
+  defaults: ->
+    return _.extend {}, super(), {
+      x_range_name: "default"
+      y_range_name: "default"
+      data_source: null
+    }
 
-  class GlyphRenderers extends Collection
-    model: GlyphRenderer
+  display_defaults: ->
+    return _.extend {}, super(), {
+      level: 'glyph'
+    }
 
-  return {
-    Model: GlyphRenderer
-    View: GlyphRendererView
-    Collection: new GlyphRenderers()
-  }
+module.exports =
+  Model: GlyphRenderer
+  View: GlyphRendererView

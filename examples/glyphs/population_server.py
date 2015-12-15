@@ -1,6 +1,5 @@
 from __future__ import print_function
 
-import time
 from math import pi
 
 from bokeh.browserlib import view
@@ -12,13 +11,11 @@ from bokeh.models import (
     SingleIntervalTicker
 )
 from bokeh.sampledata.population import load_population
-from bokeh.session import Session
 from bokeh.models.widgets import Select, HBox, VBox
+from bokeh.client import push_session
 
 document = Document()
-session = Session()
-session.use_doc('population_server')
-session.load_document(document)
+session = push_session(document)
 
 df = load_population()
 revision = 2012
@@ -32,8 +29,8 @@ locations = sorted(df.Location.unique())
 source_pyramid = ColumnDataSource(data=dict())
 
 def pyramid():
-    xdr = DataRange1d(sources=[source_pyramid.columns("male"), source_pyramid.columns("female")])
-    ydr = DataRange1d(sources=[source_pyramid.columns("groups")])
+    xdr = DataRange1d()
+    ydr = DataRange1d()
 
     plot = Plot(title=None, x_range=xdr, y_range=ydr, plot_width=600, plot_height=600)
 
@@ -60,7 +57,7 @@ source_predicted = ColumnDataSource(data=dict(x=[], y=[]))
 
 def population():
     xdr = FactorRange(factors=years)
-    ydr = DataRange1d(sources=[source_known.columns("y"), source_predicted.columns("y")])
+    ydr = DataRange1d()
 
     plot = Plot(title=None, x_range=xdr, y_range=ydr, plot_width=800, plot_height=200)
 
@@ -74,7 +71,7 @@ def population():
 
     plot.add_layout(
         Legend(
-            orientation="bottom_right",
+            location="bottom_right",
             legends=[("known", [line_known_glyph]), ("predicted", [line_predicted_glyph])],
         )
     )
@@ -115,19 +112,18 @@ def update_population():
 def update_data():
     update_population()
     update_pyramid()
-    session.store_document(document)
 
-def on_year_change(obj, attr, old, new):
+def on_year_change(attr, old, new):
     global year
     year = int(new)
     update_data()
 
-def on_location_change(obj, attr, old, new):
+def on_location_change(attr, old, new):
     global location
     location = new
     update_data()
 
-def layout():
+def create_layout():
     year_select = Select(title="Year:", value="2010", options=years)
     location_select = Select(title="Location:", value="World", options=locations)
 
@@ -139,12 +135,12 @@ def layout():
 
     return layout
 
-document.add(layout())
+layout = create_layout()
 update_data()
 
+document.add_root(layout)
+session.show(layout)
+
 if __name__ == "__main__":
-    link = session.object_link(document.context)
-    print("Please visit %s to see the plots" % link)
-    view(link)
     print("\npress ctrl-C to exit")
-    session.poll_document(document)
+    session.loop_until_closed()

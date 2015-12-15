@@ -8,19 +8,34 @@ BLD_DIR=`pwd`
 SRC_DIR=$RECIPE_DIR/..
 pushd $SRC_DIR
 
-# X.X.X.dev.YYYYMMDD builds
-if [ -e using_tags.txt ]; then
-    version=`git describe --tags`
+version=`$PYTHON scripts/get_bump_version.py`
+
+if [ -e "__travis_build_number__.txt" ]; then
+    travis_build_number=$(cat __travis_build_number__.txt)
+    if [[ "$travis_build_number" == "release" || "$travis_build_number" == "devel" ]]; then
+        # for releases and devel builds we just need the tag
+        echo $version > __conda_version__.txt
+    else
+        # for the testing machinery we also need the travis_build_number
+        echo $version.$travis_build_number > __conda_version__.txt
+    fi
 else
-    version=`$PYTHON scripts/get_bump_version.py`
+    # for local building we don't have the travis_build_number
+    echo $version > __conda_version__.txt
 fi
 
-date=`date "+%Y%m%d"`
-echo $version.dev.$date > __conda_version__.txt
 cp __conda_version__.txt $BLD_DIR
 
 pushd bokehjs
-npm install
+
+if [ -e "__travis_build_number__.txt" ]; then
+    if [ ! "$(ls -A $PWD/node_modules)" ]; then
+        npm install
+    fi
+else
+    npm install
+fi
+
 popd
 
 $PYTHON setup.py --quiet install nightly --build_js --single-version-externally-managed --record=record.txt

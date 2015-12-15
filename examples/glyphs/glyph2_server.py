@@ -9,12 +9,10 @@ from bokeh.models import (
     Plot, DataRange1d, LinearAxis, Grid,
     ColumnDataSource, PanTool, WheelZoomTool
 )
-from bokeh import session
+from bokeh.client import push_session
 
 document = Document()
-session = session.Session()
-session.use_doc('glyph2_server')
-session.load_document(document)
+session = push_session(document)
 
 x = arange(-2*pi, 2*pi, 0.1)
 y = sin(x)
@@ -22,8 +20,8 @@ r = (cos(x)+1) * 6 + 6
 
 source = ColumnDataSource(data=dict(x=x, y=y, r=r))
 
-xdr = DataRange1d(sources=[source.columns("x")])
-ydr = DataRange1d(sources=[source.columns("y")])
+xdr = DataRange1d()
+ydr = DataRange1d()
 
 plot = Plot(x_range=xdr, y_range=ydr, min_border=80)
 
@@ -44,10 +42,5 @@ plot.add_layout(Grid(dimension=1, ticker=yaxis.ticker))
 
 plot.add_tools(PanTool(), WheelZoomTool())
 
-document.add(plot)
-session.store_document(document)
-
-link = session.object_link(document.context)
-print ("please visit %s to see plots" % link)
-view(link)
-
+document.add_root(plot)
+session.show(plot)

@@ -7,7 +7,7 @@ from bokeh.document import Document
 from bokeh.embed import file_html
 from bokeh.models.glyphs import Circle
 from bokeh.models import (
-    Plot, DataRange1d, LinearAxis, ColumnDataSource, Range1d, PanTool, WheelZoomTool
+    Plot, LinearAxis, ColumnDataSource, Range1d, PanTool, WheelZoomTool
 )
 from bokeh.resources import INLINE
 
@@ -38,7 +38,7 @@ plot.add_layout(LinearAxis(y_range_name="foo"), 'left')
 plot.add_tools(PanTool(), WheelZoomTool())
 
 doc = Document()
-doc.add(plot)
+doc.add_root(plot)
 
 if __name__ == "__main__":
     filename = "twin_axis.html"

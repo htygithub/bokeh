@@ -2,7 +2,7 @@ from collections import OrderedDict
 
 import numpy as np
 
-from bokeh.plotting import *
+from bokeh.plotting import ColumnDataSource, figure, show, output_file
 from bokeh.models import HoverTool
 from bokeh.sampledata.unemployment1948 import data
 
@@ -38,7 +38,7 @@ source = ColumnDataSource(
 
 output_file('unemployment.html')
 
-TOOLS = "resize,hover,save"
+TOOLS = "resize,hover,save,pan,box_zoom,wheel_zoom"
 
 p = figure(title="US Unemployment (1948 - 2013)",
     x_range=years, y_range=list(reversed(months)),
@@ -56,7 +56,6 @@ p.axis.major_label_standoff = 0
 p.xaxis.major_label_orientation = np.pi/3
 
 hover = p.select(dict(type=HoverTool))
-hover.snap_to_data = False
 hover.tooltips = OrderedDict([
     ('date', '@month @year'),
     ('rate', '@rate'),

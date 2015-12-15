@@ -1,10 +1,12 @@
 from __future__ import division
 
+import itertools
+
 import numpy as np
 from six.moves import zip
 from collections import OrderedDict
 
-from bokeh.plotting import *
+from bokeh.plotting import ColumnDataSource, figure, show, output_file
 from bokeh.models import HoverTool
 
 output_file("hover.html")
@@ -18,7 +20,7 @@ N = len(x)
 inds = [str(i) for i in np.arange(N)]
 radii = np.random.random(size=N)*0.4 + 1.7
 colors = [
-    "#%02x%02x%02x" % (r, g, 150) for r, g in zip(np.floor(50+2*x), np.floor(30+2*y))
+    "#%02x%02x%02x" % (int(r), int(g), 150) for r, g in zip(50+2*x, 30+2*y)
 ]
 
 foo = list(itertools.permutations("abcdef"))[:N]

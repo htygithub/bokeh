@@ -1,40 +1,56 @@
-define [
-  "underscore",
-  "rbush",
-  "renderer/properties",
-  "./glyph",
-], (_, rbush, Properties, Glyph) ->
+_ = require "underscore"
+Glyph = require "./glyph"
+rbush = require "rbush"
+hittest = require "../../common/hittest"
+
+class PatchesView extends Glyph.View
+
+  _build_discontinuous_object: (nanned_qs) ->
+    # _s is @xs, @ys, @sxs, @sys
+    # an object of n 1-d arrays in either data or screen units
+    #
+    # Each 1-d array gets broken to an array of arrays split
+    # on any NaNs
+    #
+    # So:
+    # { 0: [x11, x12],
+    #   1: [x21, x22, x23],
+    #   2: [x31, NaN, x32]
+    # }
+    # becomes
+    # { 0: [[x11, x12]],
+    #   1: [[x21, x22, x23]],
+    #   2: [[x31],[x32]]
+    # }
+    ds = {}
+    for i in [0...nanned_qs.length]
+      ds[i] = []
+      qs = _.toArray(nanned_qs[i])
+      while qs.length > 0
+
+        nan_index = _.findLastIndex(qs, (q) ->  _.isNaN(q))
+
+        if nan_index >= 0
+          qs_part = qs.splice(nan_index)
+        else
+          qs_part = qs
+          qs = []
+
+        denanned = (q for q in qs_part when not _.isNaN(q))
+        ds[i].push(denanned)
+    return ds
 
 
-  point_in_poly = (x, y, px, py) ->
-    inside = false
+  _index_data: () ->
+    index = rbush()
+    pts = []
+    xss = @_build_discontinuous_object(@xs)
+    yss = @_build_discontinuous_object(@ys)
 
-    x1 = px[px.length-1]
-    y1 = py[py.length-1]
-
-    for i in [0...px.length]
-        x2 = px[i]
-        y2 = py[i]
-        if ( y1 < y ) != ( y2 < y )
-            if x1 + ( y - y1 ) / ( y2 - y1 ) * ( x2 - x1 ) < x
-                inside = not inside
-        x1 = x2
-        y1 = y2
-
-    return inside
-
-  class PatchesView extends Glyph.View
-
-    _fields: ['xs', 'ys']
-    _properties: ['line', 'fill']
-
-    _set_data: () ->
-      @max_size = _.max(@size)
-      @index = rbush()
-      pts = []
-      for i in [0...@xs.length]
-        xs = (x for x in @xs[i] when not _.isNaN(x))
-        ys = (y for y in @ys[i] when not _.isNaN(y))
+    for i in [0...@xs.length]
+      for j in [0...xss[i].length]
+        xs = xss[i][j]
+        ys = yss[i][j]
         if xs.length == 0
           continue
         pts.push([
@@ -42,103 +58,128 @@ define [
           _.max(xs), _.max(ys),
           {'i': i}
         ])
-      @index.load(pts)
+    index.load(pts)
+    return index
 
-    _map_data: () ->
-      @sxs = []
-      @sys = []
-      for i in [0...@xs.length]
-        [sx, sy] = @renderer.map_to_screen(@xs[i], @glyph.xs.units, @ys[i], @glyph.ys.units)
-        @sxs.push(sx)
-        @sys.push(sy)
+  _mask_data: (all_indices) ->
+    xr = @renderer.plot_view.x_range
+    [x0, x1] = [xr.get('min'), xr.get('max')]
 
-    _mask_data: () ->
-      # if user uses screen units, punt on trying to mask data
-      if @glyph.xs.units == "screen" or @glyph.ys.units == "screen"
-        return @all_indices
+    yr = @renderer.plot_view.y_range
+    [y0, y1] = [yr.get('min'), yr.get('max')]
 
-      xr = @renderer.plot_view.x_range
-      [x0, x1] = [xr.get('start'), xr.get('end')]
+    return (x[4].i for x in @index.search([x0, y0, x1, y1]))
 
-      yr = @renderer.plot_view.y_range
-      [y0, y1] = [yr.get('start'), yr.get('end')]
+  _render: (ctx, indices, {sxs, sys}) ->
+    # @sxss and @syss are used by _hit_point and sxc, syc
+    # This is the earliest we can build them, and only build them once
+    @sxss = @_build_discontinuous_object(sxs)
+    @syss = @_build_discontinuous_object(sys)
+    for i in indices
+      [sx, sy] = [sxs[i], sys[i]]
 
-      return (x[4].i for x in @index.search([x0, y0, x1, y1]))
+      if @visuals.fill.do_fill
+        @visuals.fill.set_vectorize(ctx, i)
 
-    _render: (ctx, indices) ->
-      for i in indices
-        [sx, sy] = [@sxs[i], @sys[i]]
+        for j in [0...sx.length]
+          if j == 0
+            ctx.beginPath()
+            ctx.moveTo(sx[j], sy[j])
+            continue
+          else if isNaN(sx[j] + sy[j])
+            ctx.closePath()
+            ctx.fill()
+            ctx.beginPath()
+            continue
+          else
+            ctx.lineTo(sx[j], sy[j])
 
-        if @props.fill.do_fill
-          @props.fill.set_vectorize(ctx, i)
+        ctx.closePath()
+        ctx.fill()
 
-          for j in [0...sx.length]
-            if j == 0
-              ctx.beginPath()
-              ctx.moveTo(sx[j], sy[j])
-              continue
-            else if isNaN(sx[j] + sy[j])
-              ctx.closePath()
-              ctx.fill()
-              ctx.beginPath()
-              continue
-            else
-              ctx.lineTo(sx[j], sy[j])
+      if @visuals.line.do_stroke
+        @visuals.line.set_vectorize(ctx, i)
 
-          ctx.closePath()
-          ctx.fill()
+        for j in [0...sx.length]
+          if j == 0
+            ctx.beginPath()
+            ctx.moveTo(sx[j], sy[j])
+            continue
+          else if isNaN(sx[j] + sy[j])
+            ctx.closePath()
+            ctx.stroke()
+            ctx.beginPath()
+            continue
+          else
+            ctx.lineTo(sx[j], sy[j])
 
-        if @props.line.do_stroke
-          @props.line.set_vectorize(ctx, i)
+        ctx.closePath()
+        ctx.stroke()
 
-          for j in [0...sx.length]
-            if j == 0
-              ctx.beginPath()
-              ctx.moveTo(sx[j], sy[j])
-              continue
-            else if isNaN(sx[j] + sy[j])
-              ctx.closePath()
-              ctx.stroke()
-              ctx.beginPath()
-              continue
-            else
-              ctx.lineTo(sx[j], sy[j])
+  _hit_point: (geometry) ->
+    [vx, vy] = [geometry.vx, geometry.vy]
+    sx = @renderer.plot_view.canvas.vx_to_sx(vx)
+    sy = @renderer.plot_view.canvas.vy_to_sy(vy)
 
-          ctx.closePath()
-          ctx.stroke()
+    x = @renderer.xmapper.map_from_target(vx, true)
+    y = @renderer.ymapper.map_from_target(vy, true)
 
-    _hit_point: (geometry) ->
-      [vx, vy] = [geometry.vx, geometry.vy]
-      sx = @renderer.plot_view.canvas.vx_to_sx(vx)
-      sy = @renderer.plot_view.canvas.vy_to_sy(vy)
+    candidates = (x[4].i for x in @index.search([x, y, x, y]))
 
-      x = @renderer.xmapper.map_from_target(vx)
-      y = @renderer.ymapper.map_from_target(vy)
-
-      candidates = (x[4].i for x in @index.search([x, y, x, y]))
-
-      hits = []
-      for i in [0...candidates.length]
-        idx = candidates[i]
-        if point_in_poly(sx, sy, @sxs[idx], @sys[idx])
+    hits = []
+    for i in [0...candidates.length]
+      idx = candidates[i]
+      sxs = @sxss[idx]
+      sys = @syss[idx]
+      for j in [0...sxs.length]
+        if hittest.point_in_poly(sx, sy, sxs[j], sys[j])
           hits.push(idx)
-      return hits
 
-    draw_legend: (ctx, x0, x1, y0, y1) ->
-      @_generic_area_legend(ctx, x0, x1, y0, y1)
+    result = hittest.create_hit_test_result()
+    result['1d'].indices = hits
+    return result
 
-  class Patches extends Glyph.Model
-    default_view: PatchesView
-    type: 'Patches'
+  _get_snap_coord: (array) ->
+      sum = 0
+      for s in array
+        sum += s
+      return sum / array.length
 
-    display_defaults: ->
-      return _.extend {}, super(), @line_defaults, @fill_defaults
+  scx: (i, sx, sy) ->
+    if @sxss[i].length is 1
+      # We don't have discontinuous objects so we're ok
+      return @_get_snap_coord(@sxs[i])
+    else
+      # We have discontinuous objects, so we need to find which
+      # one we're in, we can use point_in_poly again
+      sxs = @sxss[i]
+      sys = @syss[i]
+      for j in [0...sxs.length]
+        if hittest.point_in_poly(sx, sy, sxs[j], sys[j])
+          return @_get_snap_coord(sxs[j])
+    return null
 
-  class Patcheses extends Glyph.Collection
-    model: Patches
+  scy: (i, sx, sy) ->
+    if @syss[i].length is 1
+      # We don't have discontinuous objects so we're ok
+      return @_get_snap_coord(@sys[i])
+    else
+      # We have discontinuous objects, so we need to find which
+      # one we're in, we can use point_in_poly again
+      sxs = @sxss[i]
+      sys = @syss[i]
+      for j in [0...sxs.length]
+        if hittest.point_in_poly(sx, sy, sxs[j], sys[j])
+          return @_get_snap_coord(sys[j])
 
-  return {
-    Model: Patches
-    View: PatchesView
-    Collection: new Patcheses()
-  }
+  draw_legend: (ctx, x0, x1, y0, y1) ->
+    @_generic_area_legend(ctx, x0, x1, y0, y1)
+
+class Patches extends Glyph.Model
+  default_view: PatchesView
+  type: 'Patches'
+  coords: [ ['xs', 'ys'] ]
+
+module.exports =
+  Model: Patches
+  View: PatchesView

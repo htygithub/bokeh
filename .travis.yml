@@ -2,42 +2,120 @@ sudo: false
 
 language: python
 
+cache:
+    directories:
+        - $HOME/miniconda
+        - $HOME/.bokeh
+        - $HOME/build/bokeh/bokeh/bokehjs/node_modules
+
 python:
     - 2.7
-    - 3.3
     - 3.4
+    - 3.5
 
 env:
     global:
-        - MINICONDA_VERSION="3.5.5"
+        - MINICONDA_VERSION="latest"
         - BOKEH_DEFAULT_TIMEOUT=30
         - secure: "nLrUq2h59KN3k3hnid+Ub4RHDcVkZyrVmuMLoM6NbwKA0bwpDltaoSg5cj2dzdXKBwvv+3VP38oXLhEGLhVi7kDmyX3ICcza6Usy8zgK3s1NBgl6hFjqaJ7RjCu9OP1I42ThMTLfCQMRrYul7s74sGdZa+HfMCZcl+3Co5IzraI="
         - secure: "oI7Up9HuHSBw8k9LBNC6pLEUJONj+5NeEGFpSLSVXvqPPmyXJZ4qRE/dZ/HxZp6xyBze5GLYmdXXAdhrZyNjmU1ZA0rbBLDWLXuAW8eJm5xAXZ0NRFlHMXMkwvbG9hPTOTFtxKNS4lG/Fo5AXwE4MgT5uzQS4I7HuuNkcZOoInY="
+        - secure: "AMKPTVrc2g8j5T40hQhdEGoiod+KCkbiseVSQRDPeeX1TvQoVjbrZenrWHyHEHKc1x3LavDuCBJ3sW9cLy+QF9sdudK/cc9+aG2Hax5dyapI0iaHlzvqYDO3aguQsZcu+pVEIVatoOSv25/282aPNtNXn403jmJvd0Qt8ch1jOw="
+        - secure: "v9VkMz6cjFBZhlf6iiXSr0o2Eo/HKMMOseAxE6H+sr1vbPg19edGU+7+aAQrn09lE4oKU5JwZSzQ2KalJgrNTGrRrGyEtWGAcuS6oP17zg9LsutLGptNwyHBnCvB5aUPW7JSNs+kor7CmvZ8sVnUh810YSREjt2ZsjEG3ysZjVc="
+        - secure: "OI9ErePcqSewA8ZheZq5YtNyeLA8UM1UGskcMEAmPMf9AisYasJaPoY8NeqLGDyMcg7TcXbFQBZv7jPEngZ3RZMsDajfC3p63WOBDS7PfurKTVWTXZ28Z6vzwa3riFIca3D0eVP6bt8KZrYMo7HvWQG3vzmTSxRjx4e2wHxciKo="
+    matrix:
+      - GROUP=unit
+      - GROUP=integration
+      - GROUP=examples
+      - GROUP=flake_docs
 
 matrix:
-    include:
-        - python: 2.7
-          env: BOKEH_DEFAULT_NO_DEV=false BOKEH_DEFAULT_DIFF=FETCH_HEAD
-        - python: 2.7
-          env: BOKEH_DEFAULT_NO_DEV=true
-        - python: 3.3
-          env: BOKEH_DEFAULT_NO_DEV=false
-        - python: 3.4
-          env: BOKEH_DEFAULT_NO_DEV=false
     exclude:
+        # integration tests only py 3.4
         - python: 2.7
-        - python: 3.3
+          env: GROUP=integration
+        - python: 3.5
+          env: GROUP=integration
+        #
+        # flake_docs only py 2.7
         - python: 3.4
+          env: GROUP=flake_docs
+        - python: 3.5
+          env: GROUP=flake_docs
+        #
+        # TEMPORARILY DISABLE EXAMPLES for py 3.5
+        - python: 3.5
+          env: GROUP=examples
+
+branches:
+  only:
+    - master
+    - /^\d+.\d+.\d+dev\d+$/
+    - /^\d+.\d+.\d+rc\d+$/
+    - /^\d+.\d+.\d+$/
 
 before_install:
     - export PATH="$HOME/miniconda/bin:$PATH"
+    - echo $TRAVIS_BUILD_NUMBER > __travis_build_number__.txt
+    # To actually run the examples you need to include the [ci enable examples] in your commit
+    # This allow you to quickly iterate on minimal changes and actually trigger the examples, on demand, when you need it
+    - "export TRAVIS_COMMIT_MSG=\"$(git log --format=%B --no-merges -n 1)\""
+    # Use xvfb to run tests that require firefox
+    # http://docs.travis-ci.com/user/gui-and-headless-browsers/#Using-xvfb-to-Run-Tests-That-Require-GUI-%28e.g.-a-Web-browser%29
+    - "export DISPLAY=:99.0"
+    - "sh -e /etc/init.d/xvfb start"
 
 install:
     - scripts/travis_install
 
 script:
-    - nosetests --with-coverage --cover-package=bokeh
-    - ( cd sphinx; make all )
+    # Deactivate tests on building to avoid huge packages contaning the pics and outout html
+    # Eventually, we need to get rid of the generated stuff before packaging
+    #
+    # Run (JS and Python) unit tests on all python versions
+    - if [[ -z "$TRAVIS_TAG" && "$GROUP" == unit ]]; then py.test -s -m js -rs; fi  # Run just the JS first so we see the output
+    - if [[ -z "$TRAVIS_TAG" && "$GROUP" == unit ]]; then py.test -m 'not (examples or js or integration)' --cov=bokeh --cov-config=bokeh/.coveragerc -rs; fi  # Run the not examples or js tests (we can eat stdout for this one)
+    #
+    # Run integration tests only once (Py 3.4)
+    - if [[ -z "$TRAVIS_TAG" && "$GROUP" == integration ]]; then py.test -m integration -rs; fi  # Run the integration tests
+    #
+    # Flake/docs testing only once (Py 2.7)
+    - if [[ -z "$TRAVIS_TAG" && "$GROUP" == flake_docs ]]; then ( flake8 bokeh; cd sphinx; make all ) ; fi
+    #
+    #
+    - if [[ -z "$TRAVIS_TAG" && "$GROUP" == examples && $TRAVIS_PYTHON_VERSION == '2.7' ]]; then export BOKEH_DEFAULT_DIFF=FETCH_HEAD; export IPYTHON_ALLOW_DRAFT_WEBSOCKETS_FOR_PHANTOMJS=1; fi # Add env variable for pdiff machinery
+    - if [[ -z "$TRAVIS_TAG" && "$GROUP" == examples ]]; then if [[ $TRAVIS_COMMIT_MSG == *"[ci disable examples]"* ]]; then echo "Examples run disabled by commit"; else py.test -s -m examples -rs; fi; fi # Run the examples
+    #
+    - echo "poor man logger"
+    - echo $BOKEH_DEFAULT_DIFF; echo $TRAVIS_COMMIT_MSG; echo $TRAVIS_PULL_REQUEST
+
+after_success:
+    |
+    if [[ ! -z "$TRAVIS_TAG" && "$TRAVIS_PYTHON_VERSION" == '2.7'  ]]; then
+        #install some additional dependencies
+        conda install anaconda-client fabric --yes
+        #decrypt some files and place them in the correct location
+        openssl aes-256-cbc -K $encrypted_c19429b59af5_key -iv $encrypted_c19429b59af5_iv -in secrets.tar.enc -out secrets.tar -d
+        tar xvf secrets.tar
+        cp known_hosts ~/.ssh/known_hosts
+        cp .npmrc ~/.npmrc
+        cp .pypirc ~/.pypirc
+        chmod 600 bokeh_key
+        eval `ssh-agent -s`
+        ssh-add bokeh_key
+        #signal the correct build
+        if [[ "$TRAVIS_TAG" == *"dev"* ]] || [[ "$TRAVIS_TAG" == *"rc"* ]]; then
+          echo "Building a dev or rc package."
+          #we signal the devel build with the "devel" string into the __travis_build_number__.txt file
+          echo "devel" > __travis_build_number__.txt
+        else
+          echo "Building a release package."
+          #we signal the release with an the "release" string into the __travis_build_number__.txt file
+          echo "release" > __travis_build_number__.txt
+        fi
+        bash scripts/build_upload.sh -b $BINSTAR_TOKEN -u $RSUSER -k $RSAPIKEY
+    else
+        echo "Not building because there is no tag."
+    fi
 
 notifications:
     flowdock:

@@ -52,8 +52,8 @@ text_source = ColumnDataSource(dict(
     texts = ["CST (UTC+1)", "CEST (UTC+2)", "CST (UTC+1)"],
 ))
 
-xdr = DataRange1d(sources=[source.columns("dates")])
-ydr = DataRange1d(sources=[source.columns("sunrises", "sunsets")])
+xdr = DataRange1d()
+ydr = DataRange1d()
 
 title = "Daylight Hours - Warsaw, Poland"
 plot = Plot(
@@ -91,7 +91,7 @@ legend = Legend(legends=[("sunrise", [line1_glyph]), ("sunset", [line2_glyph])])
 plot.add_layout(legend)
 
 doc = Document()
-doc.add(plot)
+doc.add_root(plot)
 
 if __name__ == "__main__":
     filename = "daylight.html"

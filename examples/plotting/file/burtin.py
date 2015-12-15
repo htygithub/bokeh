@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from six.moves import cStringIO as StringIO
 
-from bokeh.plotting import *
+from bokeh.plotting import figure, show, output_file
 
 antibiotics = """
 bacteria,                        penicillin, streptomycin, neomycin, gram
@@ -67,8 +67,8 @@ output_file("burtin.html", title="burtin.py example")
 p = figure(plot_width=width, plot_height=height, title="",
     x_axis_type=None, y_axis_type=None,
     x_range=[-420, 420], y_range=[-420, 420],
-    min_border=0, outline_line_color=None,
-    background_fill="#f0e1d2", border_fill="#f0e1d2")
+    min_border=0, outline_line_color="black",
+    background_fill_color="#f0e1d2", border_fill_color="#f0e1d2")
 
 p.line(x+1, y+1, alpha=0)
 

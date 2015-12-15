@@ -1,7 +1,5 @@
 from __future__ import print_function
 
-import time
-
 from datetime import date
 from random import randint
 
@@ -12,13 +10,13 @@ from bokeh.models import (
     Plot, ColumnDataSource, DataRange1d,
     LinearAxis, DatetimeAxis, Grid, HoverTool
 )
-from bokeh.session import Session
-from bokeh.models.widgets import VBox, HBox, Paragraph, Button, TableColumn, DataTable
+from bokeh.models.widgets import (
+    VBox, Button, TableColumn, DataTable,
+    DateEditor, DateFormatter, IntEditor)
+from bokeh.client import push_session
 
 document = Document()
-session = Session()
-session.use_doc('widgets_server')
-session.load_document(document)
+session = push_session(document)
 
 def make_data():
     n = randint(5, 10)
@@ -30,8 +28,8 @@ def make_data():
 source = ColumnDataSource(make_data())
 
 def make_plot():
-    xdr = DataRange1d(sources=[source.columns("dates")])
-    ydr = DataRange1d(sources=[source.columns("downloads")])
+    xdr = DataRange1d()
+    ydr = DataRange1d()
 
     plot = Plot(title="Product downloads", x_range=xdr, y_range=ydr, plot_width=400, plot_height=400)
 
@@ -56,27 +54,25 @@ def make_plot():
 
 def click_handler():
     source.data = make_data()
-    session.store_document(document)
 
 def make_layout():
     plot, source = make_plot()
     columns = [
-        TableColumn(field="dates", title="Date"),
-        TableColumn(field="downloads", title="Downloads"),
+        TableColumn(field="dates", title="Date", editor=DateEditor(), formatter=DateFormatter()),
+        TableColumn(field="downloads", title="Downloads", editor=IntEditor()),
     ]
-    data_table = DataTable(source=source, columns=columns, width=400, height=400)
+    data_table = DataTable(source=source, columns=columns, width=400, height=400, editable=True)
     button = Button(label="Randomize data", type="success")
     button.on_click(click_handler)
     buttons = VBox(children=[button])
     vbox = VBox(children=[buttons, plot, data_table])
     return vbox
 
-document.add(make_layout())
-session.store_document(document)
+layout = make_layout()
+document.add_root(layout)
+
+session.show(layout)
 
 if __name__ == "__main__":
-    link = session.object_link(document.context)
-    print("Please visit %s to see the plots" % link)
-    view(link)
     print("\npress ctrl-C to exit")
-    session.poll_document(document)
+    session.loop_until_closed()

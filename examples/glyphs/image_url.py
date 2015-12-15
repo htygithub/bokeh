@@ -8,7 +8,7 @@ from bokeh.models.glyphs import ImageURL
 from bokeh.models import ColumnDataSource, Range1d, Plot, LinearAxis, Grid
 from bokeh.resources import INLINE
 
-url = "http://bokeh.pydata.org/_static/bokeh-transparent.png"
+url = "http://bokeh.pydata.org/en/latest/_static/bokeh-transparent.png"
 N = 5
 
 source = ColumnDataSource(dict(
@@ -26,7 +26,7 @@ ydr = Range1d(start=-100, end=200)
 
 plot = Plot(title="ImageURL", x_range=xdr, y_range=ydr)
 
-image1 = ImageURL(url="url", x="x1", y="y1", w="w1", h="h1", anchor="center")
+image1 = ImageURL(url="url", x="x1", y="y1", w="w1", h="h1", anchor="center", global_alpha=0.2)
 plot.add_glyph(source, image1)
 
 image2 = ImageURL(url="url", x="x2", y="y2", w=20, h=20, anchor="top_left")
@@ -45,7 +45,7 @@ plot.add_layout(Grid(dimension=0, ticker=xaxis.ticker))
 plot.add_layout(Grid(dimension=1, ticker=yaxis.ticker))
 
 doc = Document( )
-doc.add(plot)
+doc.add_root(plot)
 
 if __name__ == "__main__":
     filename = "image_url.html"
@@ -53,4 +53,3 @@ if __name__ == "__main__":
         f.write(file_html(doc, INLINE, "Image URL Example"))
     print("Wrote %s" % filename)
     view(filename)
-

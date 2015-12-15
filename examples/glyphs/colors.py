@@ -3,7 +3,7 @@ from __future__ import print_function
 from math import pi
 import pandas as pd
 
-from bokeh.models import Plot, ColumnDataSource, FactorRange, CategoricalAxis
+from bokeh.models import Plot, ColumnDataSource, FactorRange, CategoricalAxis, TapTool, HoverTool, OpenURL
 from bokeh.models.glyphs import Rect
 from bokeh.document import Document
 from bokeh.embed import file_html
@@ -165,7 +165,7 @@ ydr = FactorRange(factors=list(reversed(css3_colors.Name)))
 plot = Plot(title="CSS3 Color Names", x_range=xdr, y_range=ydr, plot_width=600, plot_height=2000)
 
 rect = Rect(x="groups", y="names", width=1, height=1, fill_color="colors", line_color=None)
-plot.add_glyph(source, rect)
+rect_renderer = plot.add_glyph(source, rect)
 
 xaxis_above = CategoricalAxis(major_label_orientation=pi/4)
 plot.add_layout(xaxis_above, 'above')
@@ -175,8 +175,15 @@ plot.add_layout(xaxis_below, 'below')
 
 plot.add_layout(CategoricalAxis(), 'left')
 
+url = "http://www.colors.commutercreative.com/@names/"
+tooltips = """Click the color to go to:<br /><a href="{url}">{url}</a>""".format(url=url)
+
+tap = TapTool(plot=plot, renderers=[rect_renderer], callback=OpenURL(url=url))
+hover = HoverTool(plot=plot, renderers=[rect_renderer], tooltips=tooltips)
+plot.tools.extend([tap, hover])
+
 doc = Document()
-doc.add(plot)
+doc.add_root(plot)
 
 if __name__ == "__main__":
     filename = "colors.html"

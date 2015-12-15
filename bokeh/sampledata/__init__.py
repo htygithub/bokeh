@@ -59,6 +59,7 @@ def download(progress=True):
     files = [
         (s3, 'CGM.csv'),
         (s3, 'US_Counties.zip'),
+        (s3, 'us_cities.json'),
         (s3, 'unemployment09.csv'),
         (s3, 'AAPL.csv'),
         (s3, 'FB.csv'),
@@ -66,6 +67,12 @@ def download(progress=True):
         (s3, 'IBM.csv'),
         (s3, 'MSFT.csv'),
         (s3, 'WPP2012_SA_DB03_POPULATION_QUINQUENNIAL.zip'),
+        (s3, 'gapminder_fertility.csv'),
+        (s3, 'gapminder_population.csv'),
+        (s3, 'gapminder_life_expectancy.csv'),
+        (s3, 'gapminder_regions.csv'),
+        (s3, 'world_cities.zip'),
+        (s3, 'airports.json'),
     ]
 
     for base_url, file_name in files:

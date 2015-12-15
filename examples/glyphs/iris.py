@@ -24,8 +24,8 @@ source = ColumnDataSource(
     )
 )
 
-xdr = DataRange1d(sources=[source.columns("petal_length")])
-ydr = DataRange1d(sources=[source.columns("petal_width")])
+xdr = DataRange1d()
+ydr = DataRange1d()
 
 plot = Plot(x_range=xdr, y_range=ydr, min_border=80, title="Iris Data")
 
@@ -47,7 +47,7 @@ plot.add_layout(Grid(dimension=1, ticker=yaxis.ticker))
 plot.add_tools(PanTool(), WheelZoomTool())
 
 doc = Document()
-doc.add(plot)
+doc.add_root(plot)
 
 if __name__ == "__main__":
     filename = "iris.html"

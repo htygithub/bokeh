@@ -32,17 +32,20 @@ text_source = ColumnDataSource(
     data=dict(xcenter=[125], ycenter=[135])
 )
 
-xdr = DataRange1d(sources=[source.columns("petal_length", "petal_width", "sepal_length", "sepal_width")])
-ydr = DataRange1d(sources=[source.columns("petal_length", "petal_width", "sepal_length", "sepal_width")])
+xdr = DataRange1d()
+ydr = DataRange1d()
 
 def make_plot(xname, yname, xax=False, yax=False, text=None):
     plot = Plot(
-        x_range=xdr, y_range=ydr, background_fill="#efe8e2",
-        border_fill='white', title="", min_border=2, h_symmetry=False, v_symmetry=False,
-        plot_width=250, plot_height=250)
+        x_range=xdr, y_range=ydr, background_fill_color="#efe8e2",
+        border_fill_color='white', title="", min_border=2, h_symmetry=False, 
+        v_symmetry=False, plot_width=250, plot_height=250)
 
     circle = Circle(x=xname, y=yname, fill_color="color", fill_alpha=0.2, size=4, line_color="color")
-    plot.add_glyph(source, circle)
+    r = plot.add_glyph(source, circle)
+
+    xdr.renderers.append(r)
+    ydr.renderers.append(r)
 
     xticker = BasicTicker()
     if xax:
@@ -86,10 +89,10 @@ for y in yattrs:
         row.append(plot)
     plots.append(row)
 
-grid = GridPlot(children=plots, title="iris_splom")
+grid = GridPlot(children=plots)
 
 doc = Document()
-doc.add(grid)
+doc.add_root(grid)
 
 if __name__ == "__main__":
     filename = "iris_splom.html"

@@ -1,393 +1,263 @@
+_ = require "underscore"
+Collection = require "./collection"
+window = {location: {href: "local"}} unless window?
 
-define [
-  "underscore",
-  "require",
+coffee = require "coffee-script"
 
-  "common/custom",
-  "common/canvas",
-  "common/cartesian_frame",
-  "common/gmap_plot",
-  "common/geojs_plot",
-  "common/grid_plot",
-  "common/layout_box",
-  "common/plot",
-  "common/plot_context",
-  "common/selection_manager",
-  "common/selector",
-  "common/tool_events",
+{logger} = require "./logging"
 
-  "mapper/categorical_mapper",
-  "mapper/linear_mapper",
-  "mapper/log_mapper",
-  "mapper/grid_mapper",
-  "mapper/linear_color_mapper",
+# add some useful functions to underscore
+require("./custom").monkey_patch()
 
-  "range/data_factor_range",
-  "range/data_range1d",
-  "range/factor_range",
-  "range/range1d",
+Config = {}
+url = window.location.href
+if url.indexOf('/bokeh') > 0
+  Config.prefix = url.slice(0, url.lastIndexOf('/bokeh')) + "/" #keep trailing slash
+else
+  Config.prefix = '/'
+console.log('Bokeh: setting prefix to', Config.prefix)
 
-  "renderer/annotation/legend",
-  "renderer/annotation/span",
-  "renderer/annotation/tooltip",
+locations =
+  Plot:                     require './plot'
+  GMapPlot:                 require './gmap_plot'
+  GridPlot:                 require './grid_plot'
+  Canvas:                   require './canvas'
+  LayoutBox:                require './layout_box'
+  CartesianFrame:           require './cartesian_frame'
+  SelectionManager:         require './selection_manager'
+  Selector:                 require './selector'
+  ToolEvents:               require './tool_events'
 
-  "renderer/glyph/glyph_renderer",
+  CustomJS:                 require '../callback/customjs'
+  OpenURL:                  require '../callback/open_url'
 
-  "renderer/glyph/annular_wedge",
-  "renderer/glyph/annulus",
-  "renderer/glyph/arc",
-  "renderer/glyph/bezier",
-  "renderer/glyph/circle",
-  "renderer/glyph/gear",
-  "renderer/glyph/image",
-  "renderer/glyph/image_rgba",
-  "renderer/glyph/image_url",
-  "renderer/glyph/line",
-  "renderer/glyph/multi_line",
-  "renderer/glyph/oval",
-  "renderer/glyph/patch",
-  "renderer/glyph/patches",
-  "renderer/glyph/quad",
-  "renderer/glyph/quadratic",
-  "renderer/glyph/ray",
-  "renderer/glyph/rect",
-  "renderer/glyph/segment",
-  "renderer/glyph/text",
-  "renderer/glyph/wedge",
+  CategoricalMapper:        require '../mapper/categorical_mapper'
+  LinearColorMapper:        require '../mapper/linear_color_mapper'
+  LinearMapper:             require '../mapper/linear_mapper'
+  LogMapper:                require '../mapper/log_mapper'
 
-  "renderer/glyph/marker/asterisk"
-  "renderer/glyph/marker/circle_cross"
-  "renderer/glyph/marker/circle_x"
-  "renderer/glyph/marker/cross"
-  "renderer/glyph/marker/diamond"
-  "renderer/glyph/marker/diamond_cross"
-  "renderer/glyph/marker/inverted_triangle"
-  "renderer/glyph/marker/square"
-  "renderer/glyph/marker/square_cross"
-  "renderer/glyph/marker/square_x"
-  "renderer/glyph/marker/triangle"
-  "renderer/glyph/marker/x"
+  DataRange1d:              require '../range/data_range1d'
+  FactorRange:              require '../range/factor_range'
+  Range1d:                  require '../range/range1d'
 
-  "renderer/guide/categorical_axis",
-  "renderer/guide/datetime_axis",
-  "renderer/guide/grid",
-  "renderer/guide/linear_axis",
-  "renderer/guide/log_axis",
+  BoxAnnotation:            require '../renderer/annotation/box_annotation'
+  Legend:                   require '../renderer/annotation/legend'
+  Span:                     require '../renderer/annotation/span'
+  Tooltip:                  require '../renderer/annotation/tooltip'
 
-  "renderer/overlay/box_selection",
-  "renderer/overlay/poly_selection",
+  TileRenderer:             require '../renderer/tile/tile_renderer'
+  TileSource:               require '../renderer/tile/tile_source'
+  TMSTileSource:            require '../renderer/tile/tms_tile_source'
+  WMTSTileSource:           require '../renderer/tile/wmts_tile_source'
+  QUADKEYTileSource:        require '../renderer/tile/quadkey_tile_source'
+  BBoxTileSource:           require '../renderer/tile/bbox_tile_source'
 
-  "source/column_data_source",
-  "source/server_data_source",
+  DynamicImageRenderer:     require '../renderer/tile/dynamic_image_renderer'
+  ImageSource:              require '../renderer/tile/image_source'
 
-  "ticking/abstract_ticker",
-  "ticking/adaptive_ticker",
-  "ticking/basic_tick_formatter",
-  "ticking/basic_ticker",
-  "ticking/log_ticker",
-  "ticking/log_tick_formatter",
-  "ticking/categorical_tick_formatter",
-  "ticking/categorical_ticker",
-  "ticking/composite_ticker",
-  "ticking/datetime_tick_formatter",
-  "ticking/datetime_ticker",
-  "ticking/days_ticker",
-  "ticking/months_ticker",
-  "ticking/single_interval_ticker",
-  "ticking/years_ticker",
+  GlyphRenderer:            require '../renderer/glyph/glyph_renderer'
 
-  "tool/button_tool",
+  AnnularWedge:             require '../renderer/glyph/annular_wedge'
+  Annulus:                  require '../renderer/glyph/annulus'
+  Arc:                      require '../renderer/glyph/arc'
+  Bezier:                   require '../renderer/glyph/bezier'
+  Circle:                   require '../renderer/glyph/circle'
+  Gear:                     require '../renderer/glyph/gear'
+  Image:                    require '../renderer/glyph/image'
+  ImageRGBA:                require '../renderer/glyph/image_rgba'
+  ImageURL:                 require '../renderer/glyph/image_url'
+  Line:                     require '../renderer/glyph/line'
+  MultiLine:                require '../renderer/glyph/multi_line'
+  Oval:                     require '../renderer/glyph/oval'
+  Patch:                    require '../renderer/glyph/patch'
+  Patches:                  require '../renderer/glyph/patches'
+  Quad:                     require '../renderer/glyph/quad'
+  Quadratic:                require '../renderer/glyph/quadratic'
+  Ray:                      require '../renderer/glyph/ray'
+  Rect:                     require '../renderer/glyph/rect'
+  Segment:                  require '../renderer/glyph/segment'
+  Text:                     require '../renderer/glyph/text'
+  Wedge:                    require '../renderer/glyph/wedge'
 
-  "tool/actions/action_tool",
-  "tool/actions/preview_save_tool",
-  "tool/actions/reset_tool",
+  Asterisk:                 require '../renderer/glyph/marker/asterisk'
+  CircleCross:              require '../renderer/glyph/marker/circle_cross'
+  CircleX:                  require '../renderer/glyph/marker/circle_x'
+  Cross:                    require '../renderer/glyph/marker/cross'
+  Diamond:                  require '../renderer/glyph/marker/diamond'
+  DiamondCross:             require '../renderer/glyph/marker/diamond_cross'
+  InvertedTriangle:         require '../renderer/glyph/marker/inverted_triangle'
+  Square:                   require '../renderer/glyph/marker/square'
+  SquareCross:              require '../renderer/glyph/marker/square_cross'
+  SquareX:                  require '../renderer/glyph/marker/square_x'
+  Triangle:                 require '../renderer/glyph/marker/triangle'
+  X:                        require '../renderer/glyph/marker/x'
 
-  "tool/gestures/box_select_tool",
-  "tool/gestures/box_zoom_tool",
-  "tool/gestures/gesture_tool",
-  "tool/gestures/lasso_select_tool",
-  "tool/gestures/pan_tool",
-  "tool/gestures/resize_tool",
-  "tool/gestures/select_tool",
-  "tool/gestures/tap_tool",
-  "tool/gestures/wheel_zoom_tool",
+  LinearAxis:               require '../renderer/guide/linear_axis'
+  LogAxis:                  require '../renderer/guide/log_axis'
+  CategoricalAxis:          require '../renderer/guide/categorical_axis'
+  DatetimeAxis:             require '../renderer/guide/datetime_axis'
+  Grid:                     require '../renderer/guide/grid'
 
-  "tool/inspectors/crosshair_tool",
-  "tool/inspectors/hover_tool",
-  "tool/inspectors/inspect_tool",
+  BoxSelection:             require '../renderer/overlay/box_selection'
+  PolySelection:            require '../renderer/overlay/poly_selection'
 
-  "widget/cell_formatters",
-  "widget/cell_editors",
-  "widget/table_column",
-  "widget/data_table",
-  'widget/paragraph'
-  'widget/hbox'
-  'widget/vbox'
-  'widget/textinput'
-  'widget/vboxform'
-  'widget/pretext'
-  'widget/selectbox'
-  'widget/slider'
-  'widget/crossfilter'
-  'widget/multiselect'
-  'widget/date_range_slider'
-  'widget/date_picker'
-  'widget/panel'
-  'widget/tabs'
-  'widget/dialog'
-  'widget/icon'
-  'widget/button'
-  'widget/toggle'
-  'widget/dropdown'
-  'widget/checkbox_group'
-  'widget/radio_group'
-  'widget/checkbox_button_group'
-  'widget/radio_button_group'
+  ColumnDataSource:         require '../source/column_data_source'
+  BlazeDataSource:          require '../source/blaze_data_source'
+  AjaxDataSource:           require '../source/ajax_data_source'
+  GeoJSONDataSource:        require '../source/geojson_data_source'
 
-  'transforms/autoencode'
-  'transforms/binarysegment'
-  'transforms/const'
-  'transforms/contour'
-  'transforms/count'
-  'transforms/countcategories'
-  'transforms/encode'
-  'transforms/cuberoot'
-  'transforms/hdalpha'
-  'transforms/id'
-  'transforms/interpolate'
-  'transforms/interpolatecolor'
-  'transforms/log'
-  'transforms/nonzero'
-  'transforms/ratio'
-  'transforms/seq'
-  'transforms/spread'
-  'transforms/tocounts'
-  'transforms/transform'
-], (_, require) ->
+  AbstractTicker:           require '../ticking/abstract_ticker'
+  AdaptiveTicker:           require '../ticking/adaptive_ticker'
+  BasicTicker:              require '../ticking/basic_ticker'
+  CategoricalTicker:        require '../ticking/categorical_ticker'
+  CompositeTicker:          require '../ticking/composite_ticker'
+  DatetimeTicker:           require '../ticking/datetime_ticker'
+  DaysTicker:               require '../ticking/days_ticker'
+  FixedTicker:              require '../ticking/fixed_ticker'
+  LogTicker:                require '../ticking/log_ticker'
+  MonthsTicker:             require '../ticking/months_ticker'
+  SingleIntervalTicker:     require '../ticking/single_interval_ticker'
+  YearsTicker:              require '../ticking/years_ticker'
 
-  # add some useful functions to underscore
-  require("common/custom").monkey_patch()
+  BasicTickFormatter:       require '../ticking/basic_tick_formatter'
+  LogTickFormatter:         require '../ticking/log_tick_formatter'
+  CategoricalTickFormatter: require '../ticking/categorical_tick_formatter'
+  DatetimeTickFormatter:    require '../ticking/datetime_tick_formatter'
+  NumeralTickFormatter:     require '../ticking/numeral_tick_formatter'
+  PrintfTickFormatter:      require '../ticking/printf_tick_formatter'
 
-  Config = {}
-  url = window.location.href
-  if url.indexOf('/bokeh') > 0
-    Config.prefix = url.slice(0, url.indexOf('/bokeh')) + "/" #keep trailing slash
-  else
-    Config.prefix = '/'
-  console.log('Bokeh: setting prefix to', Config.prefix)
+  ButtonTool:               require '../tool/button_tool'
+  ActionTool:               require '../tool/actions/action_tool'
+  PreviewSaveTool:          require '../tool/actions/preview_save_tool'
+  ResetTool:                require '../tool/actions/reset_tool'
+  HelpTool:                 require '../tool/actions/help_tool'
 
-  locations =
+  BoxSelectTool:            require '../tool/gestures/box_select_tool'
+  BoxZoomTool:              require '../tool/gestures/box_zoom_tool'
+  GestureTool:              require '../tool/gestures/gesture_tool'
+  LassoSelectTool:          require '../tool/gestures/lasso_select_tool'
+  PanTool:                  require '../tool/gestures/pan_tool'
+  PolySelectTool:           require '../tool/gestures/poly_select_tool'
+  SelectTool:               require '../tool/gestures/select_tool'
+  ResizeTool:               require '../tool/gestures/resize_tool'
+  TapTool:                  require '../tool/gestures/tap_tool'
+  WheelZoomTool:            require '../tool/gestures/wheel_zoom_tool'
 
-    Plot:                     'common/plot'
-    GMapPlot:                 'common/gmap_plot'
-    GeoJSPlot:                'common/geojs_plot'
-    GridPlot:                 'common/grid_plot'
-    PlotContext:              'common/plot_context'
-    PlotList:                 'common/plot_context'
-    Canvas:                   'common/canvas'
-    LayoutBox:                'common/layout_box'
-    CartesianFrame:           'common/cartesian_frame'
-    SelectionManager:         'common/selection_manager'
-    Selector:                 'common/selector'
-    ToolEvents:               'common/tool_events'
+  CrosshairTool:            require '../tool/inspectors/crosshair_tool'
+  HoverTool:                require '../tool/inspectors/hover_tool'
+  InspectTool:              require '../tool/inspectors/inspect_tool'
 
-    LinearColorMapper:        'mapper/linear_color_mapper'
+  ar_transforms:            [require '../ar/transforms']
 
-    DataFactorRange:          'range/data_factor_range'
-    DataRange1d:              'range/data_range1d'
-    FactorRange:              'range/factor_range'
-    Range1d:                  'range/range1d'
+collection_overrides = {}
 
-    Legend:                   'renderer/annotation/legend'
-    Span:                     'renderer/annotation/span'
-    Tooltip:                  'renderer/annotation/tooltip'
+make_collection = (model) ->
+  class C extends Collection
+    model: model
+  return new C()
 
-    GlyphRenderer:            'renderer/glyph/glyph_renderer'
-
-    AnnularWedge:             'renderer/glyph/annular_wedge'
-    Annulus:                  'renderer/glyph/annulus'
-    Arc:                      'renderer/glyph/arc'
-    Bezier:                   'renderer/glyph/bezier'
-    Circle:                   'renderer/glyph/circle'
-    Gear:                     'renderer/glyph/gear'
-    Image:                    'renderer/glyph/image'
-    ImageRGBA:                'renderer/glyph/image_rgba'
-    ImageURL:                 'renderer/glyph/image_url'
-    Line:                     'renderer/glyph/line'
-    MultiLine:                'renderer/glyph/multi_line'
-    Oval:                     'renderer/glyph/oval'
-    Patch:                    'renderer/glyph/patch'
-    Patches:                  'renderer/glyph/patches'
-    Quad:                     'renderer/glyph/quad'
-    Quadratic:                'renderer/glyph/quadratic'
-    Ray:                      'renderer/glyph/ray'
-    Rect:                     'renderer/glyph/rect'
-    Segment:                  'renderer/glyph/segment'
-    Text:                     'renderer/glyph/text'
-    Wedge:                    'renderer/glyph/wedge'
-
-    Asterisk:                 'renderer/glyph/marker/asterisk'
-    CircleCross:              'renderer/glyph/marker/circle_cross'
-    CircleX:                  'renderer/glyph/marker/circle_x'
-    Cross:                    'renderer/glyph/marker/cross'
-    Diamond:                  'renderer/glyph/marker/diamond'
-    DiamondCross:             'renderer/glyph/marker/diamond_cross'
-    InvertedTriangle:         'renderer/glyph/marker/inverted_triangle'
-    Square:                   'renderer/glyph/marker/square'
-    SquareCross:              'renderer/glyph/marker/square_cross'
-    SquareX:                  'renderer/glyph/marker/square_x'
-    Triangle:                 'renderer/glyph/marker/triangle'
-    X:                        'renderer/glyph/marker/x'
-
-    LinearAxis:               'renderer/guide/linear_axis'
-    LogAxis:                  'renderer/guide/log_axis'
-    CategoricalAxis:          'renderer/guide/categorical_axis'
-    DatetimeAxis:             'renderer/guide/datetime_axis'
-    Grid:                     'renderer/guide/grid'
-
-    BoxSelection:             'renderer/overlay/box_selection'
-    PolySelection:            'renderer/overlay/poly_selection'
-
-    ColumnDataSource:         'source/column_data_source'
-    ServerDataSource:         'source/server_data_source'
-
-    AbstractTicker:           'ticking/abstract_ticker'
-    AdaptiveTicker:           'ticking/adaptive_ticker'
-    BasicTicker:              'ticking/basic_ticker'
-    BasicTickFormatter:       'ticking/basic_tick_formatter'
-    LogTicker:                'ticking/log_ticker'
-    LogTickFormatter:         'ticking/log_tick_formatter'
-    CategoricalTicker:        'ticking/categorical_ticker'
-    CategoricalTickFormatter: 'ticking/categorical_tick_formatter'
-    CompositeTicker:          'ticking/composite_ticker'
-    DatetimeTicker:           'ticking/datetime_ticker'
-    DatetimeTickFormatter:    'ticking/datetime_tick_formatter'
-    DaysTicker:               'ticking/days_ticker'
-    MonthsTicker:             'ticking/months_ticker'
-    SingleIntervalTicker:     'ticking/single_interval_ticker'
-    YearsTicker:              'ticking/years_ticker'
-
-    ButtonTool:               'tool/button_tool'
-    ActionTool:               'tool/actions/action_tool'
-    PreviewSaveTool:          'tool/actions/preview_save_tool'
-    ResetTool:                'tool/actions/reset_tool'
-
-    BoxSelectTool:            'tool/gestures/box_select_tool'
-    BoxZoomTool:              'tool/gestures/box_zoom_tool'
-    GestureTool:              'tool/gestures/gesture_tool'
-    LassoSelectTool:          'tool/gestures/lasso_select_tool'
-    PanTool:                  'tool/gestures/pan_tool'
-    PolySelectTool:           'tool/gestures/poly_select_tool'
-    SelectTool:               'tool/gestures/select_tool'
-    ResizeTool:               'tool/gestures/resize_tool'
-    TapTool:                  'tool/gestures/tap_tool'
-    WheelZoomTool:            'tool/gestures/wheel_zoom_tool'
-
-    CrosshairTool:            'tool/inspectors/crosshair_tool'
-    HoverTool:                'tool/inspectors/hover_tool'
-    InspectTool:              'tool/inspectors/inspect_tool'
-
-    StringFormatter:          ['widget/cell_formatters', 'String']
-    NumberFormatter:          ['widget/cell_formatters', 'Number']
-    BooleanFormatter:         ['widget/cell_formatters', 'Boolean']
-
-    StringEditor:             ['widget/cell_editors', 'String']
-    TextEditor:               ['widget/cell_editors', 'Text']
-    SelectEditor:             ['widget/cell_editors', 'Select']
-    PercentEditor:            ['widget/cell_editors', 'Percent']
-    CheckboxEditor:           ['widget/cell_editors', 'Checkbox']
-    IntEditor:                ['widget/cell_editors', 'Int']
-    NumberEditor:             ['widget/cell_editors', 'Number']
-    TimeEditor:               ['widget/cell_editors', 'Time']
-    DateEditor:               ['widget/cell_editors', 'Date']
-
-    TableColumn:              'widget/table_column'
-    DataTable:                'widget/data_table'
-    Paragraph:                'widget/paragraph'
-    HBox:                     'widget/hbox'
-    VBox:                     'widget/vbox'
-    VBoxForm:                 'widget/vboxform'
-    TextInput:                'widget/textinput'
-    PreText:                  'widget/pretext'
-    Select:                   'widget/selectbox'
-    Slider:                   'widget/slider'
-    CrossFilter:              'widget/crossfilter'
-    MultiSelect:              'widget/multiselect'
-    DateRangeSlider:          'widget/date_range_slider'
-    DatePicker:               'widget/date_picker'
-    Panel:                    'widget/panel'
-    Tabs:                     'widget/tabs'
-    Dialog:                   'widget/dialog'
-    Icon:                     'widget/icon'
-    Button:                   'widget/button'
-    Toggle:                   'widget/toggle'
-    Dropdown:                 'widget/dropdown'
-    CheckboxGroup:            'widget/checkbox_group'
-    RadioGroup:               'widget/radio_group'
-    CheckboxButtonGroup:      'widget/checkbox_button_group'
-    RadioButtonGroup:         'widget/radio_button_group'
-
-    AutoEncode:               'transforms/autoencode'
-    BinarySegment:            'transforms/binarysegment'
-    Const:                    'transforms/const'
-    Contour:                  'transforms/contour'
-    Count:                    'transforms/count'
-    CountCategories:          'transforms/countcategories'
-    Cuberoot:                 'transforms/cuberoot'
-    HDAlpha:                  'transforms/hdalpha'
-    Encode:                   'transforms/encode'
-    Id:                       'transforms/id'
-    Interpolate:              'transforms/interpolate'
-    InterpolateColor:         'transforms/interpolatecolor'
-    Log:                      'transforms/log'
-    NonZero:                  'transforms/nonzero'
-    Ratio:                    'transforms/ratio'
-    Seq:                      'transforms/seq'
-    Spread:                   'transforms/spread'
-    ToCounts:                 'transforms/tocounts'
-
-  mod_cache = {}
-  collection_overrides = {}
-
-  Collections = (typename) ->
-   if collection_overrides[typename]
-     return collection_overrides[typename]
-
-    if not locations[typename]
-      throw "./base: Unknown Collection #{typename}"
-
-    modulename = locations[typename]
-
-    if _.isArray(modulename)
-      [modulename, submodulename] = modulename
+make_cache = (locations) ->
+  result = {}
+  for name, spec of locations
+    if _.isArray(spec)
+      subspec = spec[0]
+      suffix = spec[1] ? ""
+      for subname, mod of subspec
+        modname = subname + suffix
+        result[modname] = mod
     else
-      submodulename = null
+      result[name] = spec
+  return result
 
-    if not mod_cache[modulename]?
-      mod = require(modulename)
+_mod_cache = null # XXX: do NOT access directly outside _get_mod_cache()
 
-      if mod?
-          mod_cache[modulename] = mod
-      else
-          throw Error("improperly implemented collection: #{modulename}")
+_get_mod_cache = () ->
+  if not _mod_cache?
+    _mod_cache = make_cache(locations)
+  _mod_cache
 
-    mod = mod_cache[modulename]
+Collections = (typename) ->
+  mod_cache = _get_mod_cache()
 
-    if submodulename?
-      mod = mod[submodulename]
+  if collection_overrides[typename]
+    return collection_overrides[typename]
 
-    return mod.Collection
+  mod = mod_cache[typename]
 
-  Collections.register = (name, collection) ->
-    collection_overrides[name] = collection
+  if not mod?
+    throw new Error("Module `#{typename}' does not exists. The problem may be two fold. Either
+                     a model was requested that's available in an extra bundle, e.g. a widget,
+                     or a custom model was requested, but it wasn't registered before first
+                     usage.")
 
-  index = {}
+  if not mod.Collection?
+    mod.Collection = make_collection(mod.Model)
 
-  return {
-    "collection_overrides": collection_overrides # for testing only
-    "mod_cache": mod_cache # for testing only
-    "locations": locations
-    "index": index
-    "Collections": Collections
-    "Config": Config
-  }
+  return mod.Collection
+
+Collections.register = (name, collection) ->
+  collection_overrides[name] = collection
+
+# XXX: this refers to the 4th and 5th arguments of the outer function of this module,
+# which is provided by browserify during # compilation. Only first three arguments
+# are named, i.e require, module and exports, so the next ones we have to retrieve
+# like this. `modules` is the set of all modules known to bokehjs upon compilation
+# and # extended with module registration mechanism. `cache` is an internal thing of
+# browserify, but we have to manage it here as well, to all module re-registration.
+browserify = {
+  modules: arguments[4]
+  cache: arguments[5]
+}
+
+Collections.register_plugin = (plugin, locations) ->
+  logger.info("Registering plugin: #{plugin}")
+  Collections.register_locations locations, errorFn = (name) ->
+    throw new Error("#{name} was already registered, attempted to re-register in #{plugin}")
+
+Collections.register_locations = (locations, force=false, errorFn=null) ->
+  mod_cache = _get_mod_cache()
+  cache = make_cache(locations)
+
+  for own name, module of cache
+    if force or not mod_cache.hasOwnProperty(name)
+      mod_cache[name] = module
+    else
+      errorFn?(name)
+
+Collections.register_model = (name, mod) ->
+  logger.info("Registering model: #{name}")
+
+  compile = (code) ->
+    body = coffee.compile(code, {bare: true, shiftLine: true})
+    new Function("require", "module", "exports", body)
+
+  mod_cache = _get_mod_cache()
+
+  mod_name = "custom/#{name.toLowerCase()}"
+  [impl, deps] = mod
+  delete browserify.cache[mod_name]
+  browserify.modules[mod_name] = [compile(impl), deps]
+  _locations = {}
+  _locations[name] = require(mod_name)
+  Collections.register_locations(_locations, force=true)
+
+Collections.register_models = (specs) ->
+  for own name, impl of specs
+    Collections.register_model(name, impl)
+
+
+Collections.registered_names = () ->
+  Object.keys(_get_mod_cache())
+
+# "index" is a map from the toplevel model IDs rendered by
+# embed.coffee, to the view objects for those models.  It doesn't
+# contain all views, only those explicitly rendered to an element
+# by embed.coffee.
+index = {}
+
+module.exports =
+  collection_overrides: collection_overrides # for testing only
+  locations: locations #
+  index: index
+  Collections: Collections
+  Config: Config

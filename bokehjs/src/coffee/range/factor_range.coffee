@@ -1,36 +1,33 @@
+_ = require "underscore"
+HasProperties = require "../common/has_properties"
 
-define [
-  "common/collection",
-  "common/has_properties"
-], (Collection, HasProperties) ->
+class FactorRange extends HasProperties
+  type: 'FactorRange'
+  initialize: (attrs, options) ->
+    super(attrs, options)
+    @_init()
 
-  class FactorRange extends HasProperties
-    type: 'FactorRange'
-    initialize: (attrs, options) ->
-      super(attrs, options)
-      @register_property('end',
-          () -> @get('factors').length + 0.5
-        , true)
-      @add_dependencies('end', this, ['factors'])
-      @register_property('min',
-          () -> @get('start')
-        , true)
-      @add_dependencies('min', this, ['factors'])
-      @register_property('max',
-          () -> @get('end')
-        , true)
-      @add_dependencies('max', this, ['factors'])
+    @register_property('min',
+        () -> @get('start')
+      , false)
+    @add_dependencies('min', this, ['factors', 'offset'])
+    @register_property('max',
+        () -> @get('end')
+      , false)
+    @add_dependencies('max', this, ['factors', 'offset'])
 
-    defaults: ->
-      return _.extend {}, super(), {
-        start: 0.5
-        factors: []
-      }
+    @listenTo(@, 'change:factors', @_init)
+    @listenTo(@, 'change:offset', @_init)
 
-  class FactorRanges extends Collection
-    model: FactorRange
+  _init: () ->
+    @set('start', 0.5 + @get('offset'))
+    @set('end', @get('factors').length + @get('start'))
 
-  return {
-    "Model": FactorRange,
-    "Collection": new FactorRanges()
-  }
+  defaults: ->
+    return _.extend {}, super(), {
+      offset: 0
+      factors: []
+    }
+
+module.exports =
+  Model: FactorRange

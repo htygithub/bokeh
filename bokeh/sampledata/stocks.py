@@ -1,5 +1,5 @@
 '''
-This module provides some recorded stock data for the follwing stocks: AAPL, FB, GOOG, IBM, MSFT.
+This module provides some recorded stock data for the following stocks: AAPL, FB, GOOG, IBM, MSFT.
 Each set of data is available as an attribute on the module (e.g., stocks.AAPL) and the value is
 a dictionary with the structure:
 
@@ -12,6 +12,8 @@ a dictionary with the structure:
     AAPL['adj_close']  # list of float
 
 '''
+from __future__ import absolute_import
+
 import csv
 from os.path import exists, isfile, join
 import sys

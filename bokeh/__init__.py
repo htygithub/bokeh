@@ -1,264 +1,47 @@
+""" Bokeh is a Python interactive visualization library that targets modern
+web browsers for presentation.
+
+Its goal is to provide elegant, concise construction of novel graphics in the
+style of d3.js, but also deliver this capability with high-performance
+interactivity over very large or streaming datasets. Bokeh can help anyone
+who would like to quickly and easily create interactive plots, dashboards,
+and data applications.
+
+For full documentation, please visit: http://bokeh.pydata.org
+
+"""
 from __future__ import absolute_import, print_function
+
+# configure Bokeh version
+from .util.version import __version__; __version__
+from .util.version import __base_version__; __base_version__
+
+# configure Bokeh logger
+from .util import logconfig
+del logconfig
+
+# configure deprecation warnings
 import warnings
-from ._version import get_versions
-from . import utils
-try:
-    from .__conda_version__ import conda_version
-    __version__ = conda_version.replace("'","")
-    del conda_version
-except ImportError:
-    __version__ = get_versions()['version']
-    del get_versions
+from .deprecate import BokehDeprecationWarning
+warnings.simplefilter('always', BokehDeprecationWarning)
+
+# imports below are names we want to make available in the bokeh
+# module as transitive imports
+
+from . import sampledata; sampledata
 
 
-_notebook_loaded = None
+def test(args=None):
+    from .util.testing import runtests
+    return runtests(args)
 
-def load_notebook(resources=None, verbose=False, force=False, skip=False):
-    ''' Prepare the IPython notebook for displaying Bokeh plots.
-
-    Args:
-        resources (Resource, optional) :
-            how and where to load BokehJS from
-
-        verbose (bool, optional) :
-            whether to report detailed settings (default: False)
-
-        force (bool, optional) :
-            whether to skip IPython notebook check (default: False)
+def license():
+    ''' Print the Bokeh license to the console.
 
     Returns:
         None
 
     '''
-    global _notebook_loaded
-
-    # It's possible the IPython folks will chance things in the future, `force` parameter
-    # provides an escape hatch as long as `displaypub` works
-    if not force:
-        notebook = False
-        try:
-            notebook = 'notebook' in get_ipython().config.IPKernelApp.parent_appname
-        except Exception:
-            pass
-        if not notebook:
-            raise RuntimeError('load_notebook only works inside an '
-                               'IPython notebook, try using force=True.')
-
-    from .resources import INLINE
-    from .templates import NOTEBOOK_LOAD, RESOURCES
-
-    if resources is None:
-        resources = INLINE
-
-    plot_resources = RESOURCES.render(
-        js_raw = resources.js_raw,
-        css_raw = resources.css_raw,
-        js_files = resources.js_files,
-        css_files = resources.css_files,
-    )
-
-    if resources.mode == 'inline':
-        js_info = 'inline'
-        css_info = 'inline'
-    else:
-        js_info = resources.js_files[0] if len(resources.js_files) == 1 else resources.js_files
-        css_info = resources.css_files[0] if len(resources.css_files) == 1 else resources.css_files
-
-    warnings = ["Warning: " + msg['text'] for msg in resources.messages if msg['type'] == 'warn']
-
-    if _notebook_loaded:
-        warnings.append('Warning: BokehJS previously loaded')
-
-    _notebook_loaded = resources
-
-    html = NOTEBOOK_LOAD.render(
-        plot_resources = plot_resources,
-        logo_url = resources.logo_url,
-        verbose = verbose,
-        js_info = js_info,
-        css_info = css_info,
-        bokeh_version = __version__,
-        warnings = warnings,
-        skip = skip,
-    )
-    utils.publish_display_data({'text/html': html})
-
-from .settings import settings
-from . import sampledata
-
-def _print_versions():
-    import platform as pt
-    message = """
-   Bokeh version: %s
-  Python version: %s-%s
-        Platform: %s
-    """ % (__version__, pt.python_version(),
-           pt.python_implementation(), pt.platform())
-    return(message)
-
-def print_versions():
-    """ Print the versions for Bokeh and the current Python and OS.
-
-    Returns:
-        None
-
-    """
-    print(_print_versions())
-
-def report_issue(number=None , owner="bokeh", repo="bokeh",
-                 versions=True, browser=True):
-    """ Open or add to a Github issue programmatically.
-
-    This interactive function will ask you for some minimal content
-    and submit a new Github issue, adding information about your
-    current environment.
-
-    You can also call this function with a specific issue number to
-    add a comment to an already open issue.
-
-    Args:
-        number (int, optional) :
-            Omit to create a new issue, otherwise supply to comment on an
-            already created issue. (default: None)
-
-        owner (str, optional) : owner username (default: "bokeh")
-
-        repo (str, optional) : repository name (default: "bokeh")
-
-        versions (bool, optional) :
-            Whether to print system information. If True, add the current
-            system info to the end of the issue description. (default: True)
-
-        browser (bool, optional) :
-            Whether to open a browser automatically. If True, open a browser
-            to the GitHub issue page (default: True)
-
-    Notes:
-        Setting the environment variables GHUSER (Github username) and
-        GHPASS (Github password) will supply those values automatically
-        and streamline the dialog. Additionally, this function can report
-        on any GitHub project by changing the default parameters.
-
-    Returns:
-        None
-
-    """
-
-    import requests
-    import json
-    import os
-    import webbrowser
-
-    from six.moves import input
-    from six.moves.urllib.parse import urljoin
-
-    print("This is the Bokeh reporting engine.\n\n"
-          "You will be guided to build a GitHub issue.\n")
-
-    if number is None:
-        title = input('Issue title: ')
-        body = input('Description: ')
-    else:
-        body = input('Write your comment here: ')
-
-    ghuser, ghpass = (os.environ.get(x) for x in ["GHUSER", "GHPASS"])
-
-    if ghuser is None:
-        ghuser = input('GitHub username: ')
-    else:
-        print("Found GHUSER, using for GitHub username")
-
-    if ghpass is None:
-        ghpass = input('GitHub password: ')
-    else:
-        print("Found GHPASS, using for GitHub password")
-
-    base = "https://api.github.com"
-    if number is None:
-        url = "/".join(["repos", owner, repo, "issues"])
-        if versions:
-            data = {"title": title, "body": body + "\nSystem information:" + _print_versions()}
-        else:
-            data = {"title": title, "body": body}
-    else:
-        url = "/".join(["repos", owner, repo, "issues", str(number), "comments"])
-        if versions:
-            data = {"body": body + "\nSystem information:" + _print_versions()}
-        else:
-            data = {"body": body}
-    issues_url = urljoin(base, url)
-
-    print("\nPreview:\n")
-    print("Title: ", data["title"])
-    print("Description:\n\n")
-    print(data["body"])
-    value = input('Submit (y/n)? ')
-    if value.lower() in ["true", "yes", "y", "1"]:
-        r = requests.post(issues_url,
-                          auth=(ghuser, ghpass),
-                          headers={'Content-Type': 'application/json'},
-                          data=json.dumps(data))
-        if r.status_code == 201:
-            g = requests.get(issues_url)
-            if number is None:
-                print("Issue successfully submitted.")
-                if browser:
-                    webbrowser.open_new(g.json()[0].get("html_url"))
-            else:
-                print("Comment successfully submitted.")
-                g = requests.get(issues_url)
-                if browser:
-                    webbrowser.open_new(g.json()[-1].get("html_url"))
-        else:
-            print("Something failed, please check your username and password.")
-    else:
-        print("Issue not submitted.")
-
-def test(verbosity=1, xunitfile=None, exit=False):
-    """ Run the full Bokeh test suite, and output the results of the tests
-    to sys.stdout.
-
-    This function uses nosetests to discover which tests to run, and will
-    run tests in any 'tests' subdirectory within the Bokeh module.
-
-    Args:
-        verbosity (int, optional) :
-            Acceptatable values are 0 (less verbose) to 2 (most verbose)
-
-        xunitfile (str, optional) :
-            Write xunit-style XML test results to a given filename. This
-            is useful for running tests on a CI server. (default: None)
-
-        exit (bool, optional) :
-            Whether to return or exit. If True, call sys.exit with an
-            error code after the tests are finished. (default: False)
-
-    Returns:
-        int : nose return code
-
-    """
-    import nose, os, sys
-
-    argv = ['nosetests', '--verbosity=%d' % verbosity]
-
-    # Output an xunit file if requested
-    if xunitfile:
-        argv.extend(['--with-xunit', '--xunit-file=%s' % xunitfile])
-
-    # Set the logging level to warn
-    argv.extend(['--logging-level=WARN'])
-
-    # Add all 'tests' subdirectories to the options
-    rootdir = os.path.dirname(__file__)
-    for root, dirs, files in os.walk(rootdir):
-        if 'tests' in dirs:
-            testsdir = os.path.join(root, 'tests')
-            argv.append(testsdir)
-            print('Test dir: %s' % testsdir[len(rootdir)+1:])
-
-    # print versions (handy when reporting problems)
-    print_versions()
-    sys.stdout.flush()
-
-    # Run the tests
-    return nose.main(argv=argv, exit=exit)
+    from os.path import join
+    with open(join(__path__[0], 'LICENSE.txt')) as lic:
+        print(lic.read())

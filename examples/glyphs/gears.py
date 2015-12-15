@@ -7,7 +7,7 @@ from bokeh.embed import file_html
 from bokeh.resources import INLINE
 from bokeh.browserlib import view
 
-from bokeh.models import ColumnDataSource, Range1d, Plot, PanTool, WheelZoomTool, ResetTool
+from bokeh.models import Range1d, Plot, PanTool, WheelZoomTool, ResetTool
 from bokeh.models.glyphs import Gear
 
 def pitch_radius(module, teeth):
@@ -106,12 +106,13 @@ def epicyclic_gear(module, sun_teeth, planet_teeth):
     return plot
 
 doc = Document()
-doc.add(sample_gear())
+doc.add_root(sample_gear())
 
 classical = classical_gear(5, 52, 24)
 epicyclic = epicyclic_gear(5, 24, 12)
 
-doc.add(classical, epicyclic)
+doc.add_root(classical)
+doc.add_root(epicyclic)
 
 if __name__ == "__main__":
     filename = "gears.html"

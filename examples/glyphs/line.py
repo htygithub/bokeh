@@ -19,8 +19,8 @@ z = cos(x)
 
 source = ColumnDataSource(data=dict(x=x, y=y))
 
-xdr = DataRange1d(sources=[source.columns("x")])
-ydr = DataRange1d(sources=[source.columns("y")])
+xdr = DataRange1d()
+ydr = DataRange1d()
 
 plot = Plot(x_range=xdr, y_range=ydr, min_border=50)
 
@@ -37,7 +37,7 @@ preview_save = PreviewSaveTool()
 plot.add_tools(pan, wheel_zoom, preview_save)
 
 doc = Document()
-doc.add(plot)
+doc.add_root(plot)
 
 if __name__ == "__main__":
     filename = "line.html"

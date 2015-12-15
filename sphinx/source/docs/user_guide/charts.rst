@@ -1,577 +1,409 @@
 .. _userguide_charts:
 
-High Level Charts
-=================
+Making High-level Charts
+========================
 
 .. contents::
     :local:
     :depth: 2
 
-.. warning:: ``bokeh.charts`` interface is still experimental an is very likely to change in the
-  next upcoming releases. Although we will always try to be consistent we cannot guarantee
-  backwards compatibility for now. Please take this into consideration when using it.
+The high level ``bokeh.charts`` interface provides a fast, convenient way
+to create common statistical charts with a minimum of code. Wherever possible,
+the interface is geared to be extremely simple to use in conjunction with
+Pandas, by accepting a ``DataFrame`` and names of columns directly to specify
+data.
 
-The main idea behind the ``bokeh.charts`` interface is to help the users to easily get their plot
-using a very high level API.
+Key Concepts
+------------
 
-Currently the ``bokeh.charts`` interface supports the following chart types:
+* **Data**: Input data is either a Pandas :class:`pandas.DataFrame` or other table-like
+    structure, yet also handling simple formats through conversion to a `DataFrame`
+    internally.
+* **Smart Defaults**: The attempt is made to provide unique chart attribute assignment
+  (color, marker, etc) by one or more column names, while supporting custom and/or
+  advanced configuration through the same keyword argument.
 
-* ``Area`` (overlapped and stacked)
-* ``Bar`` (grouped and stacked)
-* ``BoxPlot``
-* ``Donut``
-* ``Dot``
-* ``HeatMap``
-* ``Histogram``
-* ``Line``
-* ``Scatter``
-* ``Step``
-* ``Timeseries``
+.. _userguide_charts_data_types:
 
+Accepted Charts Data Formats
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To use them, you only have to import the ``Bokeh`` chart of interest from ``bokeh.charts``::
+Charts make use of Pandas :class:`~pandas.DataFrame` internally, so any inputs provided
+coerced into this format. The Charts interface provides support for the more simple
+types externally, which can be useful for quickly building charts, or can avoid having
+to remember how to import and create a dataframe.
 
-    from bokeh.charts import Histogram
+The input types accepted are:
 
-initialize your plot with some specific arguments (for chart customization)::
+- **Array-like**: 1..* list, tuple, :class:`numpy.ndarray`, :class:`pandas.Series`
+- **Table-like**:
+    - records: a list(dict)
+    - columns: a dict(list), :class:`pandas.DataFrame`, or blaze resource
 
-    mu, sigma = 0, 0.5
-    normal = np.random.normal(mu, sigma, 1000)
-    normal_dist = OrderedDict(normal=normal)
-    hist = Histogram(normal_dist, bins=50, mu=mu, sigma=sigma,
-                     title="kwargs, dict_input", ylabel="frequency", legend="top_left",
-                     width=400, height=350, notebook=True)
+.. _userguide_attribute_specification:
 
-and finally call the ``show()`` method::
+Attribute Specification
+~~~~~~~~~~~~~~~~~~~~~~~
 
-    hist.show()
+An ``AttrSpec`` is a model for generating a look-up from a unique data label (ex. ('a',
+3)), into a chained iterable. This functionality is what powers one-liner chart
+generation, while also providing flexibility for customized inputs.
 
-.. image:: /_images/charts_histogram_cdf.png
-    :align: center
+If you were to manually generate the glyphs in a plot, you might start by using Pandas
+:meth:`~pandas.DataFrame.groupby` to identify unique subsets of your data that you'd
+like to differentiate. You would iterate over each data label and data group and assign
+unique attributes to the group.
 
-.. _charts_generic_arguments:
+**Simple Use Case**
+However, what if we don't want one specific attribute type per group? Instead, let's
+say we grouped by `['a', 'b']`, where `a` has 3 unique values and `b` has 10 unique
+values. We want to change the color by `a` and change the marker by `b`. In the groupby
+iteration, you will see each value of `a` multiple times, meaning you'll need some way
+of keeping track of which unique value of which column will result in the assignment of
+each attribute value.
 
-Generic arguments and chained methods
--------------------------------------
+**Supporting Exploratory Use**
+More importantly, you'll need to pre-define enough unique values of the attribute to
+assign to each value you have grouped on, which isn't necessarily complicated, but it
+can be especially time consuming for new or sporatic users. This process of assigning
+attributes is also generally of little interest to users that prioritize interactive data
+discovery over novel charts. With the discovery use case, you are trying to understand
+what relationships exist within the data, so it is counter-productive to require the user
+to understand the data before plotting it.
 
-Charts support a long list of arguments that you can pass when instantiating a class, as we have shown before,
-but you can also use chained methods to set those attributes as in the following example::
+Attribute Specifications avoid this issue, but are also designed to provide
+the ability to configure specific behavior as well. The typical pattern of use is shown
+shown below in pseudocode:
 
-    hist = Histogram(distributions, bins=50, notebook=True)
-    hist.title("chained_methods, dict_input").ylabel("frequency").legend(True).width(400).height(350).show()
+.. code-block:: python
 
-.. note:: Be aware that the ``show()`` method can not be chained. It has to be called at the end of your chain.
+    from bokeh.charts import color, marker
 
-Available arguments and chained methods are:
+    # generally any chart attribute can be handled with attribute specifications
 
-* ``title`` (str): the title of your plot.
-* ``xlabel`` (str): the x-axis label of your plot.
-* ``ylabel`` (str): the y-axis label of your plot.
-* ``legend`` (str, bool): the legend of your plot.
-* ``xscale`` (str): the x-axis type scale of your plot.
-* ``yscale`` (str): the y-axis type scale of your plot.
-* ``width`` (int): the width of your plot in pixels.
-* ``height`` (int): the height of you plot in pixels.
-* ``tools`` (bool): to enable or disable the tools in your plot.
-* ``filename`` (str or bool): the name of the file where your plot will be written.
-* ``server`` (str or bool): the name of your plot in the server.
-* ``notebook`` (bool):if you want to output (or not) your plot into the IPython notebook.
+    Chart(df, color='red')          # single constant value supported
+    Chart(df, color='a')            # typical use is with column name input
+    Chart(df, color=['a', 'b'])     # or multiple column names
+    Chart(df, color=color(['a', 'b']))     # equivalent to previous line
 
-You can check the docstring of each method to get more information.
+    # input of custom iterables that are automatically chained
+    Chart(df, color=color('a', palette=['red', 'green', 'blue']))
+    Chart(df, color=color('a', palette=['red', 'green', 'blue']),
+          marker=marker('b', markers=['circle', 'x']))
 
-.. _charts_interface_inputs:
+.. _userguide_charts_bar:
 
-Interface inputs
-----------------
+Bar Charts
+----------
 
-The ``bokeh.charts`` interface is ready to get your input as essentially any of the following:
+The ``Bar`` high-level chart can produce bar charts in various styles.
+``Bar`` charts are configured with a DataFrame data object, and a column
+to group. This column will label the x-axis range. Each group is
+aggregated over the ``values`` column and bars are show for the totals:
 
-* ``list``
-* ``dict``
-* ``OrderedDict``
-* numpy ``arrays``
-* pandas ``DataFrame objects``
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_bar.py
+    :source-position: above
 
-In general elements are supposed to be iterables representing each single data series values
-(i.e: list of lists, dict/ordered dict of lists, etc.. containing scalar values).
-The idea behind this canonical format is to easily represent groups of data and easily plot
-them through the interface.
 
-.. note:: Scatter chart also supports pandas ``groupby objects`` as input. As we have mentioned
-``Charts`` is still very experimental so the number of supported inputs is very likely to grow.
+.. _userguide_charts_bar_agg:
 
+Aggregations
+~~~~~~~~~~~~
 
-Let see some examples using different kind of inputs:
+The ``agg`` parameter may be used to specify how each group should be
+aggregated:
 
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_bar_agg.py
+    :source-position: above
 
-* Using a pandas ``groupby`` object (only supported by Scatter)::
+Available aggregations are:
 
-    from bokeh.sampledata.iris import flowers
-    from bokeh.charts import Scatter
+* ``'sum'``
+* ``'mean'``
+* ``'count'``
+* ``'nunique'``
+* ``'median'``
+* ``'min'``
+* ``'max'``
 
-    df = flowers[["petal_length", "petal_width", "species"]]
-    g = df.groupby("species")
+.. _userguide_charts_bar_width:
 
-    scatter = Scatter(g, filename="iris_scatter.html").title("iris dataset").legend("top_left")
-    scatter.width(600).height(400).show()
-
-* Using ``OrderedDict`` (or dict-like objects)::
-
-    from collections import OrderedDict
-
-    xyvalues = OrderedDict()
-    for i in ['setosa', 'versicolor', 'virginica']:
-        x = getattr(g.get_group(i), 'petal_length')
-        y = getattr(g.get_group(i), 'petal_width')
-        xyvalues[i] = list(zip(x, y))
-
-    scatter = Scatter(xyvalues, filename="iris_scatter.html").title("iris dataset").legend("top_left")
-    scatter.width(600).height(400).show()
-
-
-* Using a ``hierarchical`` pandas ``dataframe``::
-
-    import pandas as pd
-
-    dfvalues = pd.DataFrame(xyvalues)
-
-    scatter = Scatter(dfvalues, filename="iris_scatter.html").title("iris dataset").legend("top_left")
-    scatter.width(600).height(400).show()
-
-
-
-* Using a ``list``::
-
-    lxyvalues = xyvalues.values()
-
-    scatter = Scatter(lxyvalues, filename="iris_scatter.html").title("iris dataset").legend("top_left")
-    scatter.width(600).height(400).show()
-
-* Using a numpy ``array``::
-
-    import numpy as np
-
-    nxyvalues = np.array(xyvalues.values())
-
-    scatter = Scatter(nxyvalues, filename="iris_scatter.html").title("iris dataset").legend("top_left")
-    scatter.width(600).height(400).show()
-
-
-As you can see, in the first three cases, we inferred the ``x`` and ``y``
-labels from the received object, so don't need to specify them by yourself. This is
-done whenever possible. The following image shows the result:
-
-.. image:: /_images/charts_scatter_w_labels.png
-    :align: center
-
-When that's not possible (like the last two examples using a ``list`` and a numpy ``array``) ``Charts``
-will create a new figure without the inferred labels like the following:
-
-.. image:: /_images/charts_scatter_no_labels.png
-    :align: center
-
-
-In general ``Charts`` have standard inputs, like we have showed earlier but as we'll see
-in the next paragraph, some charts types still need specific inputs  to work effectively
-due to their own specific nature.
-
-Specific arguments
-------------------
-
-For some chart types we support specific arguments which only make sense in that
-specific chart context. For instance, if you use a Timeseries chart, the x-value (index) for each group has
-to be datetime values. Or, if you want to use the Categorical HeatMap, columns names and the specified
-index have to be string type values.
-
-Going ahead with a few more examples: as you have seen before, in the Histogram chart you need to set
-up the ``bins`` and, additionally, you can pass a ``mu`` and ``sigma`` to get the ``pdf`` and the ``cdf``
-line plots of theoretical normal distributions for these parameters.
-
-In the Bar charts case, if you pass several groups, they will be shown ``grouped`` by default:
-
-.. image:: /_images/charts_bar_grouped.png
-    :align: center
-
-But if you specify the argument ``stacked`` as True, it will be shown as stacked bars as follows:
-
-.. image:: /_images/charts_bar_stacked.png
-    :align: center
-
-|
-
-So, besides the shared arguments specified in :ref:`charts_generic_arguments` and the general
-:ref:`charts_interface_inputs` we have listed in the previous paragraph, each class support the
-following custom arguments:
-
-
-Area
-~~~~
-
-* ``values`` (see :ref:`charts_interface_inputs`): data series to be plotted. Container values must be 1d iterable of scalars.
-* ``index`` (str | 1d iterable of any sort, optional): can be used to specify a common custom index for all data series as follows:
-
-  * As a 1d iterable of any sort that will be used as series common index
-  * As a string that corresponds to the ``key`` of the mapping to be used as index (and not as data series) if ``area.values`` is a mapping (like a ``dict``, an ``OrderedDict`` or a pandas ``DataFrame``)
-
-* ``facet`` (bool, optional): generate multiple areas on multiple separate plots for each series if ``True``. Defaults to ``False``
-* ``stacked`` (bool, optional):
-
-  * ``True``: areas are draw as a stack to show the relationship of parts to a whole
-  * ``False``: areas are layered on the same chart figure. Defaults to ``False``.
-
-
-.. image:: /_images/charts_area_stacked.png
-    :align: left
-    :width: 400px
-    :height: 400px
-
-.. image:: /_images/charts_area_layered.png
-    :align: right
-    :width: 400px
-    :height: 400px
-
-
-Bar
-~~~
-
-* ``values`` (see :ref:`charts_interface_inputs`): data series to be plotted. Container values must be 1d iterable of scalars.
-* ``cat`` (list, optional): list of string representing the categories. Defaults to None.
-* ``facet`` (bool, optional): generate multiple areas on multiple separate plots for each series if ``True``. Defaults to ``False``.
-* ``stacked`` (bool, optional):
-
-  * ``True``: bars are draw as a stack to show the relationship of parts to a whole.
-  * ``False``: bars are groupped on the same chart figure. Defaults to ``False``.
-
-
-.. image:: /_images/charts_bar_stacked.png
-    :align: left
-    :width: 400px
-    :height: 400px
-
-.. image:: /_images/charts_bar_grouped.png
-    :align: right
-    :width: 400px
-    :height: 400px
-
-
-BoxPlot
-~~~~~~~
-
-* ``values`` (see :ref:`charts_interface_inputs`): data series to be plotted. Container values must be 1d iterable of scalars.
-* ``marker`` (int or string, optional): the marker type to use if outliers=True (e.g., `circle`). Defaults to `circle`.
-* ``outliers`` (bool, optional): whether or not to plot outliers. Defaults to ``True``.
-
-.. image:: /_images/charts_boxplot.png
-    :align: center
-    :width: 600px
-    :height: 400px
-
-
-
-Donut
-~~~~~
-
-* ``values`` (see :ref:`charts_interface_inputs`): data series to be plotted. Container values must be 1d iterable of scalars.
-* ``palette`` (list, optional): a list containing the colormap as hex values.
-
-.. image:: /_images/charts_donut.png
-    :align: center
-    :width: 400px
-    :height: 400px
-
-
-Dot
-~~~
-
-* ``values`` (see :ref:`charts_interface_inputs`): data series to be plotted. Container values must be 1d iterable of scalars.
-* ``cat`` (list, optional): list of string representing the categories. Defaults to None.
-* ``facet`` (bool, optional): generate multiple dots on multiple separate plots for each series if ``True``. Defaults to ``False``.
-
-.. image:: /_images/charts_dots.png
-    :align: center
-    :width: 600px
-    :height: 400px
-
-
-HeatMap
-~~~~~~~
-
-* ``values`` (see :ref:`charts_interface_inputs`): data series to be plotted. Container values must be 1d iterable of scalars.
-* ``cat`` (list, optional): list of string representing the categories. Defaults to None.
-
-.. image:: /_images/charts_heatmap.png
-    :align: center
-    :width: 600px
-    :height: 400px
-
-
-Histogram
+Bar Width
 ~~~~~~~~~
 
-* ``values`` (see :ref:`charts_interface_inputs`): data series to be plotted. Container values must be 1d iterable of scalars.
-* ``bins`` (int): number of bins to use when building the Histogram.
-* ``mu`` (float, optional): theoretical mean value for the normal distribution. Defaults to ``None``.
-* ``sigma`` (float, optional): theoretical sigma value for the normal distribution. Defaults to ``None``.
-* ``facet`` (bool, optional): generate multiple histograms on multiple separate plots for each series if ``True``. Defaults to ``False``
+The ``bar_width`` parameter can be used to specify the width of the bars, as
+percentage of category width:
 
-.. image:: /_images/charts_histograms.png
-    :align: left
-    :width: 400px
-    :height: 400px
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_bar_width.py
+    :source-position: above
 
-.. image:: /_images/charts_histogram_cdf.png
-    :align: right
-    :width: 400px
-    :height: 400px
+.. _userguide_charts_bar_color:
 
+Bar Color
+~~~~~~~~~
 
-Line
-~~~~
+The ``color`` parameter can be used to specify the color of the bars:
 
-* ``values`` (see :ref:`charts_interface_inputs`): data series to be plotted. Container values must be 1d iterable of scalars.
-* ``index`` (str | 1d iterable of any sort, optional): can be used to specify a common custom index for all chart data series as follows:
-
-  * As a 1d iterable of any sort that will be used as series common index
-  * As a string that corresponds to the ``key`` of the mapping to be used as index (and not as data series) if ``area.values`` is a mapping (like a ``dict``, an ``OrderedDict`` or a pandas ``DataFrame``)
-
-* ``facet`` (bool, optional): generate multiple lines on multiple separate plots for each series if ``True``. Defaults to ``False``
-
-.. image:: /_images/charts_lines.png
-    :align: center
-    :width: 600px
-    :height: 400px
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_bar_color.py
+    :source-position: above
 
 
-Scatter
+.. _userguide_charts_bar_group:
+
+Grouping
+~~~~~~~~
+
+Groups in the data may be visually grouped using the ``group`` parameter:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_bar_group.py
+    :source-position: above
+
+
+.. _userguide_charts_bar_stack:
+
+Stacking
+~~~~~~~~
+
+Groups in the data may be visually stacked using the ``stack`` parameter:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_bar_stack.py
+    :source-position: above
+
+
+.. _userguide_charts_boxplot:
+
+Box Plots
+---------
+
+The ``BoxPlot`` can be used to summarize the statistical properties
+of different groups of data. The ``label`` specifies a column in the data
+to group by, and a box plot is generated for each group:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_boxplot.py
+    :source-position: above
+
+The label can also accept a list of column names, in which case the data
+is grouped by all the groups in the list:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_boxplot_nested_label.py
+    :source-position: above
+
+
+.. _userguide_charts_boxplot_color:
+
+Box Color
+~~~~~~~~~
+
+The color of the box in a ``BoxPlot`` can be set to a fixed color using the
+``color`` parameter:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_boxplot_box_color.py
+    :source-position: above
+
+As with ``Bar`` charts, the color can also be given a column name, in which
+case the boxes are shaded automatically according to the group:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_boxplot_box_color_groups.py
+    :source-position: above
+
+
+.. _userguide_charts_boxplot_whisker_color:
+
+Whisker Color
+~~~~~~~~~~~~~
+
+The color of the whiskers can be similary controlled using the ``whisker_color``
+paramter. For a single color:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_boxplot_whisker_color.py
+    :source-position: above
+
+Or shaded automatically according to a column grouping:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_boxplot_whisker_color_groups.py
+    :source-position: above
+
+
+.. _userguide_charts_boxplot_outliers:
+
+Outliers
+~~~~~~~~
+
+By default, ``BoxPlot`` charts show outliers above and below the whiskers.
+However, the display of outliers can be turned on or off with the ``outliers``
+parameter:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_boxplot_outliers.py
+    :source-position: above
+
+
+.. _userguide_charts_boxplot_markers:
+
+Markers
 ~~~~~~~
 
-* ``values`` (see :ref:`charts_interface_inputs`): data series to be plotted. Container values must be 1d iterable of x, y pairs, like i.e.: ``[(1, 2), (2, 7), ..., (20122, 91)]``
-* ``facet`` (bool, optional): generate multiple scatters on multiple separate plots for each series if ``True``. Defaults to ``False``
+The marker used for displaying outliers is controlled by the ``marker``
+parameter:
 
-.. image:: /_images/charts_scatter_w_labels.png
-    :align: center
-    :width: 600px
-    :height: 400px
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_boxplot_marker.py
+    :source-position: above
 
 
-Step
-~~~~
+.. _userguide_charts_histogram:
 
-* ``values`` (see :ref:`charts_interface_inputs`): data series to be plotted. Container values must be 1d iterable of scalars.
-* ``index`` (str | 1d iterable of any sort, optional): can be used to specify a common custom index for all chart data series as follows:
+Histograms
+----------
 
-  * As a 1d iterable of any sort that will be used as series common index
-  * As a string that corresponds to the ``key`` of the mapping to be used as index (and not as data series) if ``area.values`` is a mapping (like a ``dict``, an ``OrderedDict`` or a pandas ``DataFrame``)
+The ``Histogram`` high-level chart can be used to quickly display the
+distribution of values in a set of data. It can be used by simply
+passing it a literal sequence of values (e.g a python list, NumPy
+or Pandas DataFrame column):
 
-* ``facet`` (bool, optional): generate multiple stepped lines on multiple separate plots for each series if ``True``. Defaults to ``False``
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_histogram_values_literal.py
+    :source-position: above
 
-.. image:: /_images/charts_steps.png
-    :align: center
-    :width: 600px
-    :height: 400px
+It can also be used by passing in a Pandas Dataframe as the first
+argument, and specifying the name of the column to use for the data.
+The column name can be provided as the second positional argument:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_histogram_values_field_arg.py
+    :source-position: above
+
+Or explicitly as the ``values`` keyword argument:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_histogram_values_field_kwarg.py
+    :source-position: above
 
 
-TimeSeries
-~~~~~~~~~~
+.. _userguide_charts_histogram_bins:
 
-* ``values`` (see :ref:`charts_interface_inputs`): data series to be plotted. Container values must be 1d iterable of scalars.
-* ``index`` (str | 1d iterable of any sort of ``datetime`` values, optional): can be used to specify a common custom index for all chart data series as follows:
+Number of Bins
+~~~~~~~~~~~~~~
 
-  * As a 1d iterable of any sort that will be used as series common index
-  * As a string that corresponds to the ``key`` of the mapping to be used as index (and not as data series) if ``area.values`` is a mapping (like a ``dict``, an ``OrderedDict`` or a pandas ``DataFrame``)
+The ``bins`` argument can be used to specify the number of bins to use when
+computing the histogram:
 
-* ``facet`` (bool, optional): generate multiple timeseries on multiple separate plots for each series if ``True``. Defaults to ``False``
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_histogram_bins.py
+    :source-position: above
 
-.. image:: /_images/charts_timeseries.png
-    :align: center
-    :width: 600px
-    :height: 400px
 
-|
+.. _userguide_charts_histogram_bar_color:
 
-Here you can find a summary table that makes it easier to group and visualize those differences:
+Bar Color
+~~~~~~~~~
 
-.. raw:: html
+It is also possible to control the color of the histogram bins by setting
+the ``color`` parameter:
 
-    <table border="0" class="table">
-        <colgroup>
-        <col width="8%">
-        <col width="8%">
-        <col width="9%">
-        <col width="8%">
-        <col width="8%">
-        <col width="10%">
-        <col width="8%">
-        <col width="8%">
-        <col width="9%">
-        <col width="8%">
-        <col width="8%">
-        <col width="9%">
-        </colgroup>
-        <thead valign="bottom">
-        <tr class="row-odd"><th class="head">Argument</th>
-        <th class="head">Area</th>
-        <th class="head">Bar</th>
-        <th class="head">BoxPlot</th>
-        <th class="head">HeatMap</th>
-        <th class="head">Donut</th>
-        <th class="head">Dot</th>
-        <th class="head">Histogram</th>
-        <th class="head">Line</th>
-        <th class="head">Scatter</th>
-        <th class="head">Step</th>
-        <th class="head">TimeSeries</th>
-        </tr>
-        </thead>
-        <tbody valign="top">
-        <tr class="row-even"><td>values</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE"><em>Yes</em></td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        </tr>
-        <tr class="row-odd"><td>index</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        </tr>
-        <tr class="row-even"><td>cat</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        </tr>
-        <tr class="row-odd"><td>facet</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        </tr>
-        <tr class="row-even"><td>stacked</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        </tr>
-        <tr class="row-odd"><td>pallette</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        </tr>
-        <tr class="row-even"><td>bins</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        </tr>
-        <tr class="row-odd"><td>mu</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        </tr>
-        <tr class="row-even"><td>sigma</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#D4F5CE">Yes</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        <td bgcolor="#F5CECE">No</td>
-        </tr>
-        </tbody>
-    </table>
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_histogram_color.py
+    :source-position: above
 
-.. note:: Scatter values are supposed to be iterables of coupled values. I.e.: ``[[(1, 20), ..., (200, 21)], ..., [(1, 12),... (200, 19)]]``
 
-Interface outputs
------------------
+.. _userguide_charts_histogram_color_groups:
 
-As with the low and middle level ``Bokeh`` plotting APIs, in ``bokeh.charts``,
-we also support the chart output to a file::
+Color Groups
+~~~~~~~~~~~~
 
-    hist = Histogram(distributions, bins=50, filename="my_plot")
+However, the ``color`` parameter can also be used to group the data. If the
+value of the ``color`` parameter is one of the DataFrame column names, the data
+is first grouped by this column, and a histogram is generated for each group.
+Each histogram is automatically colored differently, and a legend displayed:
 
-* ``filename``, string type, the name of your chart.
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_histogram_color_groups.py
+    :source-position: above
 
-to the ``bokeh-server``::
 
-    hist = Histogram(distributions, bins=50, server=True)
 
-* ``server``, string type, the name of your chart in the server.
+.. _userguide_charts_scatter:
 
-and to the IPython notebook::
+Scatter Plots
+-------------
 
-    hist = Histogram(distributions, bins=50, notebook=True)
+The ``Scatter`` high-level chart can be used to generate 1D or (more commonly)
+2D scatter plots. It is used by passing in DataFrame-like object as the first
+argument then specifying the columns to use for ``x`` and ``y`` coordinates:
 
-* ``notebook``, bool type, if you want to output (or not) to the notebook.
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_scatter.py
+    :source-position: above
 
-Keep in mind that, as with any other ``Bokeh`` plots in the IPython notebook,
-you have to load the ``BokehJS`` library into the notebook just doing::
 
-    import bokeh
-    bokeh.load_notebook()
+.. _userguide_charts_scatter_color:
 
-.. note:: You can output to any or all of these 3 possibilities because, right now, they are not mutually exclusive.
+Color
+~~~~~
+
+The ``color`` parameter can be used to control the color of the scatter
+markers:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_scatter_color.py
+    :source-position: above
+
+
+.. _userguide_charts_scatter_color_groups:
+
+Color Groups
+~~~~~~~~~~~~
+
+if ``color`` is supplied with the name of a data column then the data is first
+grouped by the values of that column, and then a different color is used for
+every group:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_scatter_color_group.py
+    :source-position: above
+
+
+.. _userguide_charts_scatter_legend:
+
+Legends
+~~~~~~~
+
+When grouping, a legend is usually useful, and it's location can be specified
+by the ``legend`` parameter:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_scatter_legend.py
+    :source-position: above
+
+.. _userguide_charts_scatter_marker:
+
+Markers
+~~~~~~~
+
+The ``marker`` parameter can be used to control the shape of the scatter marker:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_scatter_marker.py
+    :source-position: above
+
+As with ``color``, the ``marker`` parameter can be given a column name to group
+by the values of that column, using a different marker shape for each group:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_scatter_marker_group.py
+    :source-position: above
+
+Often it is most useful to group both the color and marker shape together:
+
+.. bokeh-plot:: source/docs/user_guide/source_examples/charts_scatter_color_marker.py
+    :source-position: above
+
+
+.. _userguide_charts_defaults:
+
+Chart Defaults
+--------------
+
+The ``bokeh.charts`` modules contains a ``defaults`` attribute. Setting
+attributes on this object is an easy way to control default properties
+on all charts created, in one place. For instance:
+
+.. code-block:: python
+
+    from bokeh.charts import defaults
+
+    defaults.width = 450
+    defaults.height = 350
+
+will set the default width and height for any chart. The full list of
+attributes that can be set is below:
+
+.. bokeh-model:: bokeh.charts.chart_options.ChartOptions
+
+

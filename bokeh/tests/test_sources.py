@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+
 import unittest
 from unittest import skipIf
 import warnings
@@ -8,7 +10,7 @@ try:
 except ImportError as e:
     is_pandas = False
 
-from bokeh.models.sources import DataSource, ColumnDataSource, ServerDataSource
+from bokeh.models.sources import DataSource, ColumnDataSource
 
 class TestColumnDataSourcs(unittest.TestCase):
 
@@ -72,10 +74,11 @@ class TestColumnDataSourcs(unittest.TestCase):
     def test_remove_exists(self):
         ds = ColumnDataSource()
         name = ds.add([1,2,3], "foo")
+        assert name
         ds.remove("foo")
         self.assertEquals(ds.column_names, [])
 
-    def test_remove_exists(self):
+    def test_remove_exists2(self):
         with warnings.catch_warnings(record=True) as w:
             ds = ColumnDataSource()
             ds.remove("foo")
@@ -83,12 +86,6 @@ class TestColumnDataSourcs(unittest.TestCase):
             self.assertEquals(len(w), 1)
             self.assertEquals(w[0].category, UserWarning)
             self.assertEquals(str(w[0].message), "Unable to find column 'foo' in data source")
-
-class TestServerDataSourcs(unittest.TestCase):
-
-    def test_basic(self):
-        ds = ServerDataSource()
-        self.assertTrue(isinstance(ds, DataSource))
 
 if __name__ == "__main__":
     unittest.main()

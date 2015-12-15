@@ -1,64 +1,77 @@
+_ = require "underscore"
+HasProperties = require "./has_properties"
+{logger} = require "./logging"
+Selector = require "./selector"
+hittest = require "./hittest"
 
-define [
-  "underscore"
-  "./has_properties"
-  "./logging"
-  "./selector"
-], (_, HasProperties, Logging, Selector) ->
+class SelectionManager extends HasProperties
+  type: 'SelectionManager'
 
-  logger = Logging.logger
+  initialize: (attrs, options) ->
+    super(attrs, options)
+    @selectors = {}
+    @inspectors = {}
 
-  class SelectionManager extends HasProperties
-    type: 'SelectionManager'
+  serializable_in_document: () -> false
 
-    initialize: (attrs, options) ->
-      super(attrs, options)
-      @selectors = {}
+  set_selection: (indices) ->
+    @_save_indices(indices)
+    source = @get('source')
+    source.trigger('select')
 
-    set_selection: (indices) ->
-      @_save_indices(indices)
-      source.trigger('select')
+  select: (tool, renderer_view, geometry, final, append=false) ->
+    source = @get('source')
+    if source != renderer_view.mget('data_source')
+      logger.warn('select called with mis-matched data sources')
 
-    select: (tool, renderer_view, geometry, final, append=false) ->
-      source = @get('source')
-      if source != renderer_view.mget('data_source')
-        logger.warn('select called with mis-matched data sources')
+    indices = renderer_view.hit_test(geometry)
 
-      indices = renderer_view.hit_test(geometry)
-
-      selector = @_get_selector(tool)
+    if indices?
+      selector = @_get_selector(renderer_view)
       selector.update(indices, final, append)
 
-      @_save_indices(selector.get('indices'))
+      @get('source').set({ "selected": selector.get('indices') })
+
       source.trigger('select')
       source.trigger('select-' + renderer_view.mget('id'))
 
-    inspect: (tool, renderer_view, geometry, data) ->
-      source = @get('source')
-      if source != renderer_view.mget('data_source')
-        logger.warn('inspect called with mis-matched data sources')
+  inspect: (tool, renderer_view, geometry, data) ->
+    source = @get('source')
+    if source != renderer_view.mget('data_source')
+      logger.warn('inspect called with mis-matched data sources')
 
-      indices = renderer_view.hit_test(geometry)
+    indices = renderer_view.hit_test(geometry)
 
-      if indices?
-        source.trigger(
-          'inspect', indices, tool, renderer_view, source, data
-        )
-        source.trigger(
-          'inspect' + renderer_view.mget('id'), indices, tool, renderer_view, source, data
-        )
+    if indices?
+      inspector = @_get_inspector(renderer_view)
+      inspector.update(indices, true, false, true)
 
-    clear: (tool) ->
-      if tool?
-        selector = @_get_selector(tool)
-        selector.clear()
-      @_save_indices([])
+      @get('source').set({ "inspected": inspector.get('indices')}, {"silent": true })
 
-    _get_selector: (tool) ->
-      _.setdefault(@selectors, tool.model.id, new Selector())
-      return @selectors[tool.model.id]
+      source.trigger(
+        'inspect', indices, tool, renderer_view, source, data
+      )
+      source.trigger(
+        "inspect#{renderer_view.mget('id')}", indices, tool, renderer_view,
+        source, data
+      )
 
-    _save_indices: (indices) ->
-      @get('source').save({
-        "selected": indices
-      }, {patch: true})
+  clear: (rview) ->
+    if rview?
+      selector = @_get_selector(rview)
+      selector.clear()
+    else
+      for k, s of @selectors
+        s.clear()
+    @_save_indices(hittest.create_hit_test_result())
+
+  _get_selector: (rview) ->
+    _.setdefault(@selectors, rview.model.id, new Selector())
+    return @selectors[rview.model.id]
+
+  _get_inspector: (rview) ->
+    _.setdefault(@inspectors, rview.model.id, new Selector())
+    return @inspectors[rview.model.id]
+
+
+module.exports = SelectionManager
